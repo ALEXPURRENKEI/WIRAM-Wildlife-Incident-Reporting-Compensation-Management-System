@@ -6,6 +6,7 @@ services:
     rootDir: spring-backend
     dockerContext: spring-backend
     dockerfilePath: spring-backend/Dockerfile
+    dockerCommand: java -jar /app/app.jar
     autoDeployTrigger: commit
     healthCheckPath: /api/health
     region: virginia

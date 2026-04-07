@@ -93,6 +93,7 @@ Important:
 - The token returned by the auth endpoints can be sent as `Authorization: Bearer <token>` or `X-Auth-Token`.
 - If PostgreSQL is unavailable or `DATABASE_URL` is missing, the backend falls back to an in-memory H2 database so the service can still boot on Render. For production persistence, keep `DATABASE_URL` configured.
 - The Render Blueprint defaults `SEED_DEMO_DATA` to `false` so production deploys start faster; turn it on only when you want demo records preloaded.
+- The Render Blueprint now sets `dockerCommand: java -jar /app/app.jar` so the service cannot inherit an old `mvn` startup command from the dashboard.
 
 ## API Summary
 
