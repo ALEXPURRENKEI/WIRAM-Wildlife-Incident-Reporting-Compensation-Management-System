@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: wiram-spring-backend
+    runtime: docker
+    plan: free
+    rootDir: spring-backend
+    dockerContext: spring-backend
+    dockerfilePath: spring-backend/Dockerfile
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    region: virginia
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: SEED_DEMO_DATA
+        value: "true"

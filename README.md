@@ -36,6 +36,8 @@ The frontend now talks to the Spring Boot API when a backend URL is configured, 
   pom.xml
   src/main/java/com/wiram/backend/
   src/main/resources/application.yml
+
+render.yaml
 ```
 
 ## Demo Accounts
@@ -116,19 +118,21 @@ The Spring Boot backend exposes:
 Recommended setup:
 
 1. Set the Vercel project root directory to `frontend`.
-2. Deploy the Spring Boot backend separately on Render from the `spring-backend` folder.
+2. Deploy the Spring Boot backend on Render using the included `render.yaml` Blueprint.
 3. Add the environment variables listed above to Render.
 4. Keep the frontend static and let it call the Render API when you wire it up.
 
 Render deployment options for the backend:
 
-- Build command: `mvn -DskipTests package`
-- Start command: `java -Dserver.port=$PORT -jar target/wiram-spring-backend-1.0.0.jar`
-- Or use the included `spring-backend/Dockerfile`
+- Recommended: use the included `render.yaml` Blueprint, which deploys the Spring backend as a Docker web service.
+- If you keep a manually created Java service, use:
+  - Build command: `mvn -DskipTests package`
+  - Start command: `java -Dserver.port=$PORT -jar target/wiram-spring-backend-1.0.0.jar`
+- Do not use `mvn spring-boot:run` as the Render start command. The runtime image does not include Maven, which is why the deploy failed.
 
 ## Notes
 
 - Demo users and sample incidents are seeded automatically by default.
 - Set `SEED_DEMO_DATA=false` in production if you want to disable the demo dataset.
 - The backend uses PostgreSQL through JPA/Hibernate and is ready for Render deployment.
-- If you use the Dockerfile, Render only needs the repo path `spring-backend` and the `DATABASE_URL` / `CORS_ORIGIN` env vars.
+- If you use the Docker Blueprint, Render only needs the repo path in the Blueprint and the `DATABASE_URL` / `CORS_ORIGIN` env vars.
