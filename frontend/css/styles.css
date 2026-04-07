@@ -352,6 +352,14 @@ svg {
   padding: 0.8rem;
 }
 
+.auth-note {
+  background: #f4f8ef;
+  border: 1px solid #dfe8d3;
+  border-radius: 12px;
+  padding: 0.85rem 0.9rem;
+  color: var(--muted);
+}
+
 .auth-demo ul {
   margin: 0.6rem 0 0;
   padding-left: 1.1rem;
@@ -680,6 +688,12 @@ th {
   display: grid;
   gap: 0.8rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.history-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
 }
 
 .detail-item {

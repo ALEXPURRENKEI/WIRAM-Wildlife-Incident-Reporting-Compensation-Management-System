@@ -2,13 +2,12 @@
 
 Wildlife Incident Reporting and Compensation Management System
 
-This repository now contains:
+This repository contains:
 
-- A static frontend built with HTML, CSS, and Vanilla JavaScript
-- An Express + PostgreSQL backend for real persistence on Neon / Render
+- A responsive static frontend built with HTML, CSS, and Vanilla JavaScript
+- A Spring Boot backend with PostgreSQL persistence for real API-backed workflows
 
-The frontend still has a localStorage demo mode, and the backend is ready for API-based
-integration.
+The frontend now talks to the Spring Boot API when a backend URL is configured, and it still keeps a localStorage demo fallback for offline/testing use.
 
 ## Project Structure
 
@@ -33,18 +32,10 @@ integration.
   /assets/images/
   vercel.json
 
-/backend
-  package.json
-  server.js
-  .env.example
-  /src
-    app.js
-    db.js
-    config.js
-    /middleware
-    /routes
-    /services
-    /utils
+/spring-backend
+  pom.xml
+  src/main/java/com/wiram/backend/
+  src/main/resources/application.yml
 ```
 
 ## Demo Accounts
@@ -57,35 +48,87 @@ Password for all demo users: `password123`
 
 ## Local Development
 
-Frontend:
+### Frontend
 
-1. Open the `frontend` folder with a static server or deploy it directly to Vercel.
+Open the `frontend` folder with a static server or deploy it directly to Vercel.
 
-Backend:
+By default, the frontend looks for the API at `http://localhost:8080` during local development.
+If you deploy the backend to Render, update the frontend API base URL in `frontend/js/app.js`
+or set `localStorage.wiram_api_base_url` to your Render service URL.
 
-1. Copy `backend/.env.example` to `backend/.env` or set the same variables on Render.
-2. Set `DATABASE_URL` to your Neon PostgreSQL connection string.
-3. Run `npm install` inside `backend`.
-4. Start the API with `npm run dev`.
+### Backend
+
+Requirements:
+
+- Java 17
+- Maven
+
+Run the Spring backend from the `spring-backend` folder:
+
+```bash
+mvn spring-boot:run
+```
+
+## Environment Variables
+
+Set these in Render for the Spring Boot backend:
+
+- `DATABASE_URL`
+- `CORS_ORIGIN`
+- `SEED_DEMO_DATA`
+- `PORT`
+
+Recommended values:
+
+- `DATABASE_URL` = your Neon PostgreSQL connection string
+- `CORS_ORIGIN` = your frontend URL or `*` during local testing
+- `SEED_DEMO_DATA` = `true` for demo setups, `false` in production
+
+Important:
+
+- Do not commit `DATABASE_URL` into the frontend or repository.
+- The backend normalizes the raw Neon URI into a JDBC connection internally.
+- The token returned by the auth endpoints can be sent as `Authorization: Bearer <token>` or `X-Auth-Token`.
+
+## API Summary
+
+The Spring Boot backend exposes:
+
+- `/api/health`
+- `/api/auth/register`
+- `/api/auth/login`
+- `/api/auth/logout`
+- `/api/auth/me`
+- `/api/reports`
+- `/api/reports/my`
+- `/api/reports/{id}`
+- `/api/reports/{id}/status`
+- `/api/reports/{id}/history`
+- `/api/dashboard`
+- `/api/dashboard/member`
+- `/api/dashboard/officer`
+- `/api/dashboard/admin`
+- `/api/users`
+- `/api/users/{id}/role`
 
 ## Render / Vercel Deployment
 
 Recommended setup:
 
 1. Set the Vercel project root directory to `frontend`.
-2. Deploy the backend separately on Render from the `backend` folder.
-3. Add these Render environment variables:
-   - `DATABASE_URL`
-   - `JWT_SECRET`
-   - `CORS_ORIGIN`
-   - `SEED_DEMO_DATA`
-   - `DATABASE_SSL`
-4. Deploy the frontend as a static site.
+2. Deploy the Spring Boot backend separately on Render from the `spring-backend` folder.
+3. Add the environment variables listed above to Render.
+4. Keep the frontend static and let it call the Render API when you wire it up.
 
-The included `frontend/vercel.json` keeps the site clean and deployment-ready.
+Render deployment options for the backend:
 
-## Backend Notes
+- Build command: `mvn -DskipTests package`
+- Start command: `java -Dserver.port=$PORT -jar target/wiram-spring-backend-1.0.0.jar`
+- Or use the included `spring-backend/Dockerfile`
 
-- Demo data is seeded automatically by default.
-- Set `SEED_DEMO_DATA=false` in production if you want to disable demo accounts and reports.
-- The API exposes auth, reports, users, and dashboard summary routes under `/api`.
+## Notes
+
+- Demo users and sample incidents are seeded automatically by default.
+- Set `SEED_DEMO_DATA=false` in production if you want to disable the demo dataset.
+- The backend uses PostgreSQL through JPA/Hibernate and is ready for Render deployment.
+- If you use the Dockerfile, Render only needs the repo path `spring-backend` and the `DATABASE_URL` / `CORS_ORIGIN` env vars.

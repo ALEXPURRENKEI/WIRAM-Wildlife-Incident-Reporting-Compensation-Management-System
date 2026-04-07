@@ -1,24 +1,49 @@
 (function () {
   "use strict";
 
-  // Basic email format check for login and registration forms.
   function validateEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  // Creates a new user record in localStorage.
-  function registerUser(payload) {
+  function normalizeText(value) {
+    return String(value || "").trim();
+  }
+
+  function getApiEnabled() {
+    return Boolean(window.WIRAM && window.WIRAM.isApiConfigured && window.WIRAM.isApiConfigured());
+  }
+
+  async function fallbackRegister(name, email, password) {
+    const users = window.WIRAM.getUsers();
+    if (users.some(function (user) { return String(user.email || "").toLowerCase() === email; })) {
+      window.WIRAM.showAlert("That email is already registered.", "error");
+      return null;
+    }
+
+    const createdUser = {
+      id: window.WIRAM.createId("USR"),
+      name: name,
+      email: email,
+      password: password,
+      role: "member",
+      createdAt: new Date().toISOString()
+    };
+    users.push(createdUser);
+    window.WIRAM.setUsers(users);
+    return createdUser;
+  }
+
+  async function registerUser(payload) {
     const form = document.getElementById("registerForm");
     const data = payload || (form ? new FormData(form) : null);
     if (!data) {
       return false;
     }
 
-    const name = String(data.get("name") || "").trim();
-    const email = String(data.get("email") || "").trim().toLowerCase();
+    const name = normalizeText(data.get("name"));
+    const email = normalizeText(data.get("email")).toLowerCase();
     const password = String(data.get("password") || "");
     const confirmPassword = String(data.get("confirmPassword") || "");
-    const role = String(data.get("role") || "member");
 
     if (name.length < 2) {
       window.WIRAM.showAlert("Please enter your full name.", "error");
@@ -30,8 +55,8 @@
       return false;
     }
 
-    if (password.length < 6) {
-      window.WIRAM.showAlert("Password must have at least 6 characters.", "error");
+    if (password.length < 8) {
+      window.WIRAM.showAlert("Password must have at least 8 characters.", "error");
       return false;
     }
 
@@ -40,46 +65,88 @@
       return false;
     }
 
-    const allowedRoles = ["member", "officer", "admin"];
-    if (allowedRoles.indexOf(role) === -1) {
-      window.WIRAM.showAlert("Please choose a valid role.", "error");
+    window.WIRAM.showSpinner();
+    try {
+      let authResult;
+      if (getApiEnabled()) {
+        authResult = await window.WIRAM.registerRemoteUser({
+          name: name,
+          email: email,
+          password: password
+        });
+      } else {
+        const created = await fallbackRegister(name, email, password);
+        if (!created) {
+          return false;
+        }
+        authResult = {
+          token: "",
+          expiresAt: null,
+          user: {
+            id: created.id,
+            name: created.name,
+            email: created.email,
+            role: created.role,
+            token: "",
+            expiresAt: null
+          }
+        };
+      }
+
+      const sessionUser = authResult.user;
+      window.WIRAM.setCurrentUser(sessionUser);
+      window.WIRAM.setFlashMessage("Registration successful. Welcome, " + sessionUser.name + ".", "success");
+      window.location.href = window.WIRAM.getRoleHome(sessionUser.role);
+      return true;
+    } catch (error) {
+      if (getApiEnabled()) {
+        try {
+          const created = await fallbackRegister(name, email, password);
+          if (created) {
+            window.WIRAM.setFlashMessage("Registration successful. Please log in.", "success");
+            window.location.href = "login.html";
+            return true;
+          }
+        } catch (_fallbackError) {
+          // Fall through to the error below.
+        }
+      }
+
+      window.WIRAM.showAlert(error.message || "Unable to register at this time.", "error");
       return false;
+    } finally {
+      window.WIRAM.hideSpinner();
     }
-
-    const users = window.WIRAM.getUsers();
-    const emailExists = users.some(function (user) {
-      return user.email.toLowerCase() === email;
-    });
-
-    if (emailExists) {
-      window.WIRAM.showAlert("That email is already registered.", "error");
-      return false;
-    }
-
-    users.push({
-      id: window.WIRAM.createId("USR"),
-      name: name,
-      email: email,
-      password: password,
-      role: role,
-      createdAt: new Date().toISOString()
-    });
-    window.WIRAM.setUsers(users);
-
-    window.WIRAM.setFlashMessage("Registration successful. Please log in.", "success");
-    window.location.href = "login.html";
-    return true;
   }
 
-  // Authenticates users from localStorage and creates a lightweight session object.
-  function loginUser(payload) {
+  async function fallbackLogin(email, password) {
+    const users = window.WIRAM.getUsers();
+    const found = users.find(function (user) {
+      return String(user.email || "").toLowerCase() === email && user.password === password;
+    });
+
+    if (!found) {
+      return null;
+    }
+
+    return {
+      id: found.id,
+      name: found.name,
+      email: found.email,
+      role: found.role,
+      token: "",
+      expiresAt: null
+    };
+  }
+
+  async function loginUser(payload) {
     const form = document.getElementById("loginForm");
     const data = payload || (form ? new FormData(form) : null);
     if (!data) {
       return false;
     }
 
-    const email = String(data.get("email") || "").trim().toLowerCase();
+    const email = normalizeText(data.get("email")).toLowerCase();
     const password = String(data.get("password") || "");
 
     if (!validateEmail(email)) {
@@ -93,52 +160,61 @@
     }
 
     window.WIRAM.showSpinner();
+    try {
+      let sessionUser = null;
 
-    const users = window.WIRAM.getUsers();
-    const found = users.find(function (user) {
-      return user.email.toLowerCase() === email && user.password === password;
-    });
+      if (getApiEnabled()) {
+        const authResult = await window.WIRAM.loginRemoteUser({ email: email, password: password });
+        sessionUser = authResult.user;
+      } else {
+        sessionUser = await fallbackLogin(email, password);
+      }
 
-    if (!found) {
-      window.WIRAM.hideSpinner();
-      window.WIRAM.showAlert("Invalid email or password.", "error");
-      return false;
-    }
+      if (!sessionUser) {
+        window.WIRAM.showAlert("Invalid email or password.", "error");
+        return false;
+      }
 
-    const sessionUser = {
-      id: found.id,
-      name: found.name,
-      email: found.email,
-      role: found.role
-    };
-
-    window.setTimeout(function () {
       window.WIRAM.setCurrentUser(sessionUser);
+      window.WIRAM.setFlashMessage("Welcome back, " + sessionUser.name + ".", "success");
+      window.location.href = window.WIRAM.getRoleHome(sessionUser.role);
+      return true;
+    } catch (error) {
+      const fallbackUser = await fallbackLogin(email, password);
+      if (fallbackUser) {
+        window.WIRAM.setCurrentUser(fallbackUser);
+        window.WIRAM.setFlashMessage("Welcome back, " + fallbackUser.name + ".", "success");
+        window.location.href = window.WIRAM.getRoleHome(fallbackUser.role);
+        return true;
+      }
+
+      window.WIRAM.showAlert(error.message || "Invalid email or password.", "error");
+      return false;
+    } finally {
       window.WIRAM.hideSpinner();
-      window.WIRAM.setFlashMessage(
-        "Welcome back, " + found.name + ".",
-        "success"
-      );
-      window.location.href = window.WIRAM.getRoleHome(found.role);
-    }, 500);
-
-    return true;
+    }
   }
 
-  // Ends session and returns user to login page.
-  function logoutUser() {
-    window.WIRAM.clearCurrentUser();
-    window.WIRAM.setFlashMessage("You have logged out successfully.", "info");
-    window.location.href = "login.html";
+  async function logoutUser() {
+    try {
+      if (getApiEnabled()) {
+        await window.WIRAM.logoutRemoteUser();
+      }
+    } catch (_error) {
+      // Logout should still complete locally even if the remote call fails.
+    } finally {
+      window.WIRAM.clearCurrentUser();
+      window.WIRAM.setFlashMessage("You have logged out successfully.", "info");
+      window.location.href = "login.html";
+    }
   }
 
-  // Binds form submit handlers once per page load.
   function bindAuthForms() {
     const loginForm = document.getElementById("loginForm");
     if (loginForm && !loginForm.dataset.bound) {
       loginForm.addEventListener("submit", function (event) {
         event.preventDefault();
-        loginUser();
+        void loginUser();
       });
       loginForm.dataset.bound = "true";
     }
@@ -147,7 +223,7 @@
     if (registerForm && !registerForm.dataset.bound) {
       registerForm.addEventListener("submit", function (event) {
         event.preventDefault();
-        registerUser();
+        void registerUser();
       });
       registerForm.dataset.bound = "true";
     }

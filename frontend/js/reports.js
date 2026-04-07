@@ -1,7 +1,6 @@
 (function () {
   "use strict";
 
-  // Reads uploaded images locally so users can preview evidence before submit.
   function readAsDataUrl(file) {
     return new Promise(function (resolve, reject) {
       const reader = new FileReader();
@@ -19,7 +18,6 @@
     return String(status || "").toLowerCase().trim();
   }
 
-  // Shared status filter utility used by all report tables.
   function filterReports(status, reportsList) {
     const normalized = normalizeStatus(status);
     if (!normalized || normalized === "all") {
@@ -29,89 +27,6 @@
     return reportsList.filter(function (report) {
       return normalizeStatus(report.status) === normalized;
     });
-  }
-
-  // Saves a new incident report for the logged-in member.
-  async function submitReport(payload) {
-    const form = document.getElementById("reportForm");
-    const data = payload || (form ? new FormData(form) : null);
-    if (!data) {
-      return false;
-    }
-
-    const currentUser = window.WIRAM.getCurrentUser();
-    if (!currentUser) {
-      window.WIRAM.setFlashMessage("Please log in before submitting a report.", "error");
-      window.location.href = "login.html";
-      return false;
-    }
-
-    const animalType = String(data.get("animalType") || "").trim();
-    const incidentType = String(data.get("incidentType") || "").trim();
-    const location = String(data.get("location") || "").trim();
-    const description = String(data.get("description") || "").trim();
-    const estimatedLoss = Number(data.get("estimatedLoss") || 0);
-    const imageFile = data.get("reportImage");
-
-    if (!animalType || !incidentType || !location || !description) {
-      window.WIRAM.showAlert("Please complete all required incident fields.", "error");
-      return false;
-    }
-
-    if (!Number.isFinite(estimatedLoss) || estimatedLoss <= 0) {
-      window.WIRAM.showAlert("Estimated loss must be greater than 0.", "error");
-      return false;
-    }
-
-    let evidenceName = "";
-    let evidenceData = "";
-
-    try {
-      window.WIRAM.showSpinner();
-
-      if (imageFile && imageFile.name) {
-        evidenceName = imageFile.name;
-        evidenceData = await readAsDataUrl(imageFile);
-      }
-
-      const reports = window.WIRAM.getReports();
-      const now = new Date().toISOString();
-      reports.unshift({
-        id: window.WIRAM.createId("RPT"),
-        animalType: animalType,
-        incidentType: incidentType,
-        location: location,
-        description: description,
-        estimatedLoss: estimatedLoss,
-        evidenceName: evidenceName,
-        evidenceData: evidenceData,
-        status: "pending",
-        reporterId: currentUser.id,
-        reporterName: currentUser.name,
-        createdAt: now,
-        updatedAt: now
-      });
-
-      window.WIRAM.setReports(reports);
-      window.WIRAM.hideSpinner();
-      window.WIRAM.showAlert("Incident report submitted successfully.", "success");
-
-      if (form) {
-        form.reset();
-      }
-
-      const preview = document.getElementById("imagePreview");
-      if (preview) {
-        preview.src = "";
-        preview.classList.add("hidden");
-      }
-
-      return true;
-    } catch (_error) {
-      window.WIRAM.hideSpinner();
-      window.WIRAM.showAlert("Unable to submit report. Please try again.", "error");
-      return false;
-    }
   }
 
   function statusBadge(status) {
@@ -164,7 +79,6 @@
     return '<div class="table-actions">' + actions + "</div>";
   }
 
-  // Generic table renderer reused by member, officer, and admin pages.
   function displayReports(options) {
     const config = options || {};
     const tableBodyId = config.tableBodyId || "reportsTableBody";
@@ -197,15 +111,15 @@
           "<td>" +
           window.WIRAM.escapeHtml(report.id) +
           "</td>" +
-          (includeReporter ? "<td>" + window.WIRAM.escapeHtml(report.reporterName) + "</td>" : "") +
+          (includeReporter ? "<td>" + window.WIRAM.escapeHtml(report.reporterName || "-") + "</td>" : "") +
           "<td>" +
-          window.WIRAM.escapeHtml(report.animalType) +
+          window.WIRAM.escapeHtml(report.animalType || "-") +
           "</td>" +
           "<td>" +
-          window.WIRAM.escapeHtml(report.incidentType) +
+          window.WIRAM.escapeHtml(report.incidentType || "-") +
           "</td>" +
           "<td>" +
-          window.WIRAM.escapeHtml(report.location) +
+          window.WIRAM.escapeHtml(report.location || "-") +
           "</td>" +
           "<td>" +
           window.WIRAM.formatCurrency(report.estimatedLoss) +
@@ -227,8 +141,7 @@
     bindTableActions(tableBody);
   }
 
-  // Updates report workflow status: pending, verified, rejected, paid.
-  function updateStatus(reportId, status) {
+  async function updateStatus(reportId, status) {
     const normalized = normalizeStatus(status);
     const valid = ["pending", "verified", "rejected", "paid"];
     if (valid.indexOf(normalized) === -1) {
@@ -236,40 +149,60 @@
       return false;
     }
 
-    const reports = window.WIRAM.getReports();
-    const report = reports.find(function (item) {
+    const localReports = window.WIRAM.getReports();
+    const localReport = localReports.find(function (item) {
       return item.id === reportId;
     });
 
-    if (!report) {
+    if (!localReport && !window.WIRAM.isApiConfigured()) {
       window.WIRAM.showAlert("Report was not found.", "error");
       return false;
     }
 
-    report.status = normalized;
-    report.updatedAt = new Date().toISOString();
+    window.WIRAM.showSpinner();
+    try {
+      if (window.WIRAM.isApiConfigured()) {
+        await window.WIRAM.updateRemoteReportStatus(reportId, normalized, "");
+      } else if (localReport) {
+        localReport.status = normalized;
+        localReport.updatedAt = new Date().toISOString();
+        const currentUser = window.WIRAM.getCurrentUser();
+        if (currentUser) {
+          localReport.reviewedBy = currentUser.name;
+          localReport.reviewedByName = currentUser.name;
+        }
+        window.WIRAM.setReports(localReports);
+      }
 
-    const currentUser = window.WIRAM.getCurrentUser();
-    if (currentUser) {
-      report.reviewedBy = currentUser.name;
+      window.WIRAM.showAlert(
+        "Report " + reportId + " updated to " + normalized + ".",
+        "success"
+      );
+      await refreshReportViews();
+      return true;
+    } catch (error) {
+      window.WIRAM.showAlert(error.message || "Unable to update the report.", "error");
+      return false;
+    } finally {
+      window.WIRAM.hideSpinner();
     }
-
-    window.WIRAM.setReports(reports);
-    window.WIRAM.showAlert(
-      "Report " + report.id + " updated to " + normalized + ".",
-      "success"
-    );
-
-    refreshReportViews();
-    return true;
   }
 
-  // Modal details view for report deep dive.
-  function openReportModal(reportId) {
-    const reports = window.WIRAM.getReports();
-    const report = reports.find(function (item) {
-      return item.id === reportId;
-    });
+  async function openReportModal(reportId) {
+    let report = null;
+    try {
+      if (window.WIRAM.isApiConfigured()) {
+        report = await window.WIRAM.loadReportDetail(reportId);
+      } else {
+        report = window.WIRAM.getReports().find(function (item) {
+          return item.id === reportId;
+        });
+      }
+    } catch (error) {
+      window.WIRAM.showAlert(error.message || "Unable to load report details.", "error");
+      return;
+    }
+
     if (!report) {
       return;
     }
@@ -284,7 +217,37 @@
         ? '<img class="upload-preview" src="' +
           window.WIRAM.escapeHtml(report.evidenceData) +
           '" alt="Evidence Preview" />'
+        : report.evidenceData
+        ? '<a class="btn btn-secondary btn-sm" href="' +
+          window.WIRAM.escapeHtml(report.evidenceData) +
+          '" target="_blank" rel="noreferrer">Open Evidence</a>'
         : "<p class='muted'>No image preview available.</p>";
+
+    const history = Array.isArray(report.history) ? report.history : [];
+    const historyMarkup =
+      history.length > 0
+        ? '<div class="history-list">' +
+          history
+            .map(function (item) {
+              return (
+                '<div class="detail-item">' +
+                "<strong>" +
+                window.WIRAM.escapeHtml(item.status || "-") +
+                "</strong>" +
+                '<div class="muted">' +
+                window.WIRAM.escapeHtml(item.notes || "Status updated.") +
+                "</div>" +
+                '<div class="muted" style="margin-top: 0.25rem;">' +
+                window.WIRAM.escapeHtml(item.changedByName || "System") +
+                " · " +
+                window.WIRAM.formatDate(item.changedAt) +
+                "</div>" +
+                "</div>"
+              );
+            })
+            .join("") +
+          "</div>"
+        : "<p class='muted'>No status history yet.</p>";
 
     modalBody.innerHTML =
       '<div class="modal-body-grid">' +
@@ -295,13 +258,13 @@
       window.WIRAM.escapeHtml(report.reporterName || "-") +
       "</div>" +
       '<div class="detail-item"><strong>Animal Type</strong>' +
-      window.WIRAM.escapeHtml(report.animalType) +
+      window.WIRAM.escapeHtml(report.animalType || "-") +
       "</div>" +
       '<div class="detail-item"><strong>Incident Type</strong>' +
-      window.WIRAM.escapeHtml(report.incidentType) +
+      window.WIRAM.escapeHtml(report.incidentType || "-") +
       "</div>" +
       '<div class="detail-item"><strong>Location</strong>' +
-      window.WIRAM.escapeHtml(report.location) +
+      window.WIRAM.escapeHtml(report.location || "-") +
       "</div>" +
       '<div class="detail-item"><strong>Estimated Loss</strong>' +
       window.WIRAM.formatCurrency(report.estimatedLoss) +
@@ -315,21 +278,26 @@
       '<div class="detail-item"><strong>Last Updated</strong>' +
       window.WIRAM.formatDate(report.updatedAt) +
       "</div>" +
+      '<div class="detail-item"><strong>Reviewed By</strong>' +
+      window.WIRAM.escapeHtml(report.reviewedByName || "-") +
+      "</div>" +
       '<div class="detail-item"><strong>Evidence File</strong>' +
       window.WIRAM.escapeHtml(report.evidenceName || "Not provided") +
       "</div>" +
       '<div class="detail-item" style="grid-column: 1 / -1;"><strong>Description</strong>' +
-      window.WIRAM.escapeHtml(report.description) +
+      window.WIRAM.escapeHtml(report.description || "No description available.") +
       "</div>" +
       '<div class="detail-item" style="grid-column: 1 / -1;"><strong>Evidence Preview</strong>' +
       imageHtml +
+      "</div>" +
+      '<div class="detail-item" style="grid-column: 1 / -1;"><strong>Status History</strong>' +
+      historyMarkup +
       "</div>" +
       "</div>";
 
     window.WIRAM.openModal("reportModal");
   }
 
-  // Event delegation for dynamic report action buttons inside tables.
   function bindTableActions(tableBody) {
     if (tableBody.dataset.bound) {
       return;
@@ -348,20 +316,19 @@
       }
 
       if (action === "view") {
-        openReportModal(reportId);
+        void openReportModal(reportId);
         return;
       }
 
       if (action === "status") {
         const nextStatus = actionButton.getAttribute("data-next-status");
-        updateStatus(reportId, nextStatus);
+        void updateStatus(reportId, nextStatus);
       }
     });
 
     tableBody.dataset.bound = "true";
   }
 
-  // Attaches image preview behavior to the report form upload field.
   function bindImagePreview() {
     const imageInput = document.getElementById("reportImage");
     const preview = document.getElementById("imagePreview");
@@ -389,65 +356,153 @@
     imageInput.dataset.bound = "true";
   }
 
-  // Page-specific renderers.
-  function renderMyReports() {
+  async function submitReport(payload) {
+    const form = document.getElementById("reportForm");
+    const data = payload || (form ? new FormData(form) : null);
+    if (!data) {
+      return false;
+    }
+
+    const currentUser = window.WIRAM.getCurrentUser();
+    if (!currentUser) {
+      window.WIRAM.setFlashMessage("Please log in before submitting a report.", "error");
+      window.location.href = "login.html";
+      return false;
+    }
+
+    const animalType = String(data.get("animalType") || "").trim();
+    const incidentType = String(data.get("incidentType") || "").trim();
+    const location = String(data.get("location") || "").trim();
+    const description = String(data.get("description") || "").trim();
+    const estimatedLoss = Number(data.get("estimatedLoss") || 0);
+    const imageFile = data.get("reportImage");
+
+    if (!animalType || !incidentType || !location || !description) {
+      window.WIRAM.showAlert("Please complete all required incident fields.", "error");
+      return false;
+    }
+
+    if (!Number.isFinite(estimatedLoss) || estimatedLoss <= 0) {
+      window.WIRAM.showAlert("Estimated loss must be greater than 0.", "error");
+      return false;
+    }
+
+    let evidenceName = "";
+    let evidenceData = "";
+
+    try {
+      window.WIRAM.showSpinner();
+
+      if (imageFile && imageFile.name) {
+        evidenceName = imageFile.name;
+        evidenceData = await readAsDataUrl(imageFile);
+      }
+
+      if (window.WIRAM.isApiConfigured()) {
+        await window.WIRAM.submitRemoteReport({
+          animalType: animalType,
+          incidentType: incidentType,
+          location: location,
+          description: description,
+          estimatedLoss: estimatedLoss,
+          evidenceName: evidenceName,
+          evidenceData: evidenceData
+        });
+      } else {
+        const reports = window.WIRAM.getReports();
+        const now = new Date().toISOString();
+        reports.unshift({
+          id: window.WIRAM.createId("RPT"),
+          animalType: animalType,
+          incidentType: incidentType,
+          location: location,
+          description: description,
+          estimatedLoss: estimatedLoss,
+          evidenceName: evidenceName,
+          evidenceData: evidenceData,
+          status: "pending",
+          reporterId: currentUser.id,
+          reporterName: currentUser.name,
+          createdAt: now,
+          updatedAt: now
+        });
+        window.WIRAM.setReports(reports);
+      }
+
+      window.WIRAM.showAlert("Incident report submitted successfully.", "success");
+
+      if (form) {
+        form.reset();
+      }
+
+      const preview = document.getElementById("imagePreview");
+      if (preview) {
+        preview.src = "";
+        preview.classList.add("hidden");
+      }
+
+      await refreshReportViews();
+      return true;
+    } catch (error) {
+      window.WIRAM.showAlert(error.message || "Unable to submit report. Please try again.", "error");
+      return false;
+    } finally {
+      window.WIRAM.hideSpinner();
+    }
+  }
+
+  async function renderMyReports() {
     const table = document.getElementById("myReportsTableBody");
     if (!table) {
       return;
     }
 
-    const user = window.WIRAM.getCurrentUser();
-    if (!user) {
-      return;
-    }
-
     const filter = document.getElementById("myReportsFilter");
     const filterValue = filter ? filter.value : "all";
-    const allReports = window.WIRAM
-      .getReports()
-      .filter(function (report) {
-        return report.reporterId === user.id;
-      })
-      .sort(function (a, b) {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-    const filtered = filterReports(filterValue, allReports);
+    let reports = [];
+
+    try {
+      reports = await window.WIRAM.loadReportsForCurrentUser();
+    } catch (_error) {
+      reports = window.WIRAM.getReports();
+    }
+
+    reports = reports.slice().sort(function (a, b) {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
 
     displayReports({
       tableBodyId: "myReportsTableBody",
-      data: filtered,
+      data: filterReports(filterValue, reports),
       includeReporter: false,
       actionContext: "member",
       emptyMessage: "You have not submitted incident reports yet."
     });
   }
 
-  function renderClaimStatus() {
+  async function renderClaimStatus() {
     const table = document.getElementById("claimStatusTableBody");
     if (!table) {
       return;
     }
 
-    const user = window.WIRAM.getCurrentUser();
-    if (!user) {
-      return;
-    }
-
     const filter = document.getElementById("claimStatusFilter");
     const filterValue = filter ? filter.value : "all";
-    const reports = window.WIRAM
-      .getReports()
-      .filter(function (report) {
-        return report.reporterId === user.id;
-      })
-      .sort(function (a, b) {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-    const filtered = filterReports(filterValue, reports);
+    let reports = [];
+
+    try {
+      reports = await window.WIRAM.loadReportsForCurrentUser();
+    } catch (_error) {
+      reports = window.WIRAM.getReports();
+    }
+
+    reports = reports.slice().sort(function (a, b) {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
 
     displayReports({
       tableBodyId: "claimStatusTableBody",
-      data: filtered,
+      data: filterReports(filterValue, reports),
       includeReporter: false,
       actionContext: "member",
       emptyMessage: "No claim statuses available yet."
@@ -457,7 +512,7 @@
     window.WIRAM.renderStatusChart("claimChart", reports);
   }
 
-  function renderVerifyIncidents() {
+  async function renderVerifyIncidents() {
     const table = document.getElementById("verifyTableBody");
     if (!table) {
       return;
@@ -465,24 +520,28 @@
 
     const filter = document.getElementById("verifyFilter");
     const filterValue = filter ? filter.value : "all";
-    const reports = window.WIRAM
-      .getReports()
-      .slice()
-      .sort(function (a, b) {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-    const filtered = filterReports(filterValue, reports);
+    let reports = [];
+
+    try {
+      reports = await window.WIRAM.loadReportsForCurrentUser();
+    } catch (_error) {
+      reports = window.WIRAM.getReports();
+    }
+
+    reports = reports.slice().sort(function (a, b) {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
 
     displayReports({
       tableBodyId: "verifyTableBody",
-      data: filtered,
+      data: filterReports(filterValue, reports),
       includeReporter: true,
       actionContext: "officer",
       emptyMessage: "No incidents available for verification."
     });
   }
 
-  function renderAdminReports() {
+  async function renderAdminReports() {
     const table = document.getElementById("adminReportsTableBody");
     if (!table) {
       return;
@@ -490,17 +549,21 @@
 
     const filter = document.getElementById("adminReportsFilter");
     const filterValue = filter ? filter.value : "all";
-    const reports = window.WIRAM
-      .getReports()
-      .slice()
-      .sort(function (a, b) {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-    const filtered = filterReports(filterValue, reports);
+    let reports = [];
+
+    try {
+      reports = await window.WIRAM.loadReportsForCurrentUser();
+    } catch (_error) {
+      reports = window.WIRAM.getReports();
+    }
+
+    reports = reports.slice().sort(function (a, b) {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
 
     displayReports({
       tableBodyId: "adminReportsTableBody",
-      data: filtered,
+      data: filterReports(filterValue, reports),
       includeReporter: true,
       actionContext: "admin",
       emptyMessage: "No incidents available."
@@ -518,18 +581,20 @@
       if (!node || node.dataset.bound) {
         return;
       }
-      node.addEventListener("change", item.fn);
+      node.addEventListener("change", function () {
+        void item.fn();
+      });
       node.dataset.bound = "true";
     });
   }
 
-  function refreshReportViews() {
-    renderMyReports();
-    renderClaimStatus();
-    renderVerifyIncidents();
-    renderAdminReports();
+  async function refreshReportViews() {
+    await renderMyReports();
+    await renderClaimStatus();
+    await renderVerifyIncidents();
+    await renderAdminReports();
     if (typeof window.WIRAM.refreshDashboardViews === "function") {
-      window.WIRAM.refreshDashboardViews();
+      await window.WIRAM.refreshDashboardViews();
     }
   }
 
@@ -541,7 +606,7 @@
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
-      submitReport();
+      void submitReport();
     });
     form.dataset.bound = "true";
     bindImagePreview();
@@ -555,6 +620,6 @@
   document.addEventListener("DOMContentLoaded", function () {
     bindReportForm();
     bindFilters();
-    refreshReportViews();
+    void refreshReportViews();
   });
 })();

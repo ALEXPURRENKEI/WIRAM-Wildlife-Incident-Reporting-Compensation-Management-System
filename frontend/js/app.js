@@ -1,6 +1,14 @@
 (function () {
   "use strict";
 
+  window.WIRAM_CONFIG = window.WIRAM_CONFIG || {};
+  if (!window.WIRAM_CONFIG.API_BASE_URL) {
+    window.WIRAM_CONFIG.API_BASE_URL =
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? "http://localhost:8080"
+        : "";
+  }
+
   // Centralized localStorage keys used across the whole application.
   const STORAGE_KEYS = {
     users: "wiram_users",
@@ -45,7 +53,21 @@
   }
 
   function setCurrentUser(user) {
-    localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(user));
+    if (!user) {
+      clearCurrentUser();
+      return;
+    }
+
+    const normalized = {
+      id: user.id || null,
+      name: user.name || "",
+      email: user.email || "",
+      role: normalizeRole(user.role),
+      token: user.token || "",
+      expiresAt: user.expiresAt || null
+    };
+
+    localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(normalized));
   }
 
   function clearCurrentUser() {
@@ -99,6 +121,324 @@
     });
   }
 
+  function normalizeRole(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function normalizeStatus(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function getApiBaseUrl() {
+    const candidates = [
+      window.WIRAM_API_BASE_URL,
+      window.localStorage.getItem("wiram_api_base_url"),
+      window.WIRAM_CONFIG && window.WIRAM_CONFIG.API_BASE_URL,
+      ""
+    ];
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = String(candidates[index] || "").trim();
+      if (candidate) {
+        return candidate.replace(/\/+$/, "");
+      }
+    }
+
+    return "";
+  }
+
+  function isApiConfigured() {
+    return Boolean(getApiBaseUrl());
+  }
+
+  function getAuthToken() {
+    const currentUser = getCurrentUser();
+    return currentUser && currentUser.token ? currentUser.token : "";
+  }
+
+  function normalizeSessionUser(user, token, expiresAt) {
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id || null,
+      name: user.name || "",
+      email: user.email || "",
+      role: normalizeRole(user.role),
+      token: token || user.token || "",
+      expiresAt: expiresAt || user.expiresAt || null
+    };
+  }
+
+  function normalizeUserRecord(user) {
+    if (!user) {
+      return user;
+    }
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: normalizeRole(user.role),
+      createdAt: user.createdAt || null,
+      updatedAt: user.updatedAt || null
+    };
+  }
+
+  function normalizeReportRecord(report) {
+    if (!report) {
+      return report;
+    }
+
+    const status = normalizeStatus(report.status);
+    return {
+      id: report.id,
+      animalType: report.animalType || "",
+      incidentType: report.incidentType || "",
+      location: report.location || "",
+      description: report.description || "",
+      estimatedLoss: report.estimatedLoss || 0,
+      evidenceName: report.evidenceName || "",
+      evidenceData: report.evidenceData || "",
+      status: status,
+      reporterId: report.reporterId || report.reporter?.id || report.reporter?.uuid || "",
+      reporterName: report.reporterName || report.reporter?.name || "",
+      reporterEmail: report.reporterEmail || report.reporter?.email || "",
+      reviewedBy: report.reviewedBy || "",
+      reviewedByName: report.reviewedByName || "",
+      reviewedAt: report.reviewedAt || null,
+      createdAt: report.createdAt || null,
+      updatedAt: report.updatedAt || null,
+      hasEvidence:
+        typeof report.hasEvidence === "boolean"
+          ? report.hasEvidence
+          : Boolean(report.evidenceData && String(report.evidenceData).trim()),
+      history: Array.isArray(report.history) ? report.history : []
+    };
+  }
+
+  function updateUsersCache(users) {
+    setUsers((users || []).map(normalizeUserRecord));
+  }
+
+  function updateReportsCache(reports) {
+    setReports((reports || []).map(normalizeReportRecord));
+  }
+
+  async function parseApiResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.indexOf("application/json") !== -1) {
+      return response.json();
+    }
+    return response.text();
+  }
+
+  async function apiRequest(path, options) {
+    if (!isApiConfigured()) {
+      throw new Error("API base URL is not configured.");
+    }
+
+    const requestOptions = options || {};
+    const headers = new Headers(requestOptions.headers || {});
+    const token = getAuthToken();
+    const body = requestOptions.body;
+
+    if (token) {
+      headers.set("Authorization", "Bearer " + token);
+    }
+
+    if (body && !(body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const response = await fetch(getApiBaseUrl() + path, {
+      method: requestOptions.method || "GET",
+      headers: headers,
+      body: body
+    });
+
+    const payload = await parseApiResponse(response);
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && payload.message
+          ? payload.message
+          : "Request failed.";
+      const error = new Error(message);
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
+    }
+
+    return payload;
+  }
+
+  async function loadReportsForCurrentUser() {
+    const currentUser = getCurrentUser();
+    if (!isApiConfigured()) {
+      const reports = getReports();
+      if (!currentUser) {
+        return [];
+      }
+
+      if (normalizeRole(currentUser.role) === "member") {
+        return reports.filter(function (report) {
+          return report.reporterId === currentUser.id;
+        });
+      }
+
+      return reports;
+    }
+
+    if (!currentUser) {
+      return [];
+    }
+
+    const endpoint = currentUser.role === "member" ? "/api/reports/my" : "/api/reports";
+    const payload = await apiRequest(endpoint);
+    const reports = Array.isArray(payload) ? payload.map(normalizeReportRecord) : [];
+    return reports;
+  }
+
+  async function loadReportsForAllUsers() {
+    if (!isApiConfigured()) {
+      return getReports();
+    }
+
+    const payload = await apiRequest("/api/reports");
+    const reports = Array.isArray(payload) ? payload.map(normalizeReportRecord) : [];
+    return reports;
+  }
+
+  async function loadUsersForAdmin() {
+    if (!isApiConfigured()) {
+      return getUsers();
+    }
+
+    const payload = await apiRequest("/api/users");
+    const users = Array.isArray(payload) ? payload.map(normalizeUserRecord) : [];
+    return users;
+  }
+
+  async function loadReportDetail(reportId) {
+    if (!isApiConfigured()) {
+      const report = getReports().find(function (item) {
+        return item.id === reportId;
+      });
+      if (!report) {
+        throw new Error("Report not found.");
+      }
+      return report;
+    }
+
+    const payload = await apiRequest("/api/reports/" + encodeURIComponent(reportId));
+    const detail = normalizeReportRecord(payload);
+    if (payload && Array.isArray(payload.history)) {
+      detail.history = payload.history.map(function (history) {
+        return {
+          id: history.id,
+          status: normalizeStatus(history.status),
+          notes: history.notes || "",
+          changedByName: history.changedByName || "",
+          changedAt: history.changedAt || null
+        };
+      });
+    }
+    return detail;
+  }
+
+  async function submitRemoteReport(payload) {
+    const response = await apiRequest("/api/reports", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    return normalizeReportRecord(response);
+  }
+
+  async function updateRemoteReportStatus(reportId, status, notes) {
+    const response = await apiRequest("/api/reports/" + encodeURIComponent(reportId) + "/status", {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: String(status || "").toUpperCase(),
+        notes: notes || ""
+      })
+    });
+    return normalizeReportRecord(response);
+  }
+
+  async function updateRemoteUserRole(userId, role) {
+    const response = await apiRequest("/api/users/" + encodeURIComponent(userId) + "/role", {
+      method: "PATCH",
+      body: JSON.stringify({
+        role: String(role || "").toUpperCase()
+      })
+    });
+    return normalizeUserRecord(response);
+  }
+
+  async function loginRemoteUser(payload) {
+    const response = await apiRequest("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    return {
+      token: response.token,
+      expiresAt: response.expiresAt,
+      user: normalizeSessionUser(response.user, response.token, response.expiresAt)
+    };
+  }
+
+  async function registerRemoteUser(payload) {
+    const response = await apiRequest("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    return {
+      token: response.token,
+      expiresAt: response.expiresAt,
+      user: normalizeSessionUser(response.user, response.token, response.expiresAt)
+    };
+  }
+
+  async function logoutRemoteUser() {
+    if (!isApiConfigured()) {
+      return true;
+    }
+
+    await apiRequest("/api/auth/logout", {
+      method: "POST"
+    });
+    return true;
+  }
+
+  async function verifyCurrentSession() {
+    if (!isApiConfigured()) {
+      return getCurrentUser();
+    }
+
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      return null;
+    }
+
+    if (!currentUser.token) {
+      return currentUser;
+    }
+
+    try {
+      const response = await apiRequest("/api/auth/me");
+      const session = normalizeSessionUser(response, currentUser.token, currentUser.expiresAt);
+      setCurrentUser(session);
+      return session;
+    } catch (error) {
+      if (error.status === 401 || error.status === 403) {
+        clearCurrentUser();
+        return null;
+      }
+      throw error;
+    }
+  }
+
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -109,7 +449,7 @@
   }
 
   function getRoleHome(role) {
-    return ROLE_HOME[role] || "index.html";
+    return ROLE_HOME[normalizeRole(role)] || "index.html";
   }
 
   // Inject alert and spinner containers once so each page can use them.
@@ -276,9 +616,11 @@
       return;
     }
 
-    if (roles.length > 0 && roles.indexOf(user.role) === -1) {
+    const currentRole = normalizeRole(user.role);
+
+    if (roles.length > 0 && roles.indexOf(currentRole) === -1) {
       setFlashMessage("You do not have permission to view that page.", "error");
-      window.location.href = getRoleHome(user.role);
+      window.location.href = getRoleHome(currentRole);
     }
   }
 
@@ -379,22 +721,36 @@
   }
 
   // Admin user table rendering and role updates.
-  function renderUsersTable() {
+  async function renderUsersTable() {
     const tableBody = document.getElementById("usersTableBody");
     if (!tableBody) {
       return;
     }
 
     const roleFilter = document.getElementById("usersRoleFilter");
-    const selectedRole = roleFilter ? roleFilter.value : "all";
-    const users = getUsers().slice().sort(function (a, b) {
+    const selectedRole = roleFilter ? normalizeRole(roleFilter.value) : "all";
+    let users = getUsers().slice();
+
+    try {
+      users = await loadUsersForAdmin();
+    } catch (error) {
+      if (!users.length) {
+        showAlert(error.message || "Unable to load users.", "error");
+        tableBody.innerHTML =
+          '<tr><td colspan="6" class="table-empty">Unable to load users.</td></tr>';
+        return;
+      }
+    }
+
+    users = users.slice().sort(function (a, b) {
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
+    tableBody.__users = users;
     const filtered =
       selectedRole === "all"
         ? users
         : users.filter(function (user) {
-            return user.role === selectedRole;
+            return normalizeRole(user.role) === selectedRole;
           });
 
     if (!filtered.length) {
@@ -414,9 +770,9 @@
           escapeHtml(user.email) +
           "</td>" +
           '<td><span class="role-chip role-' +
-          escapeHtml(user.role) +
+          escapeHtml(normalizeRole(user.role)) +
           '">' +
-          escapeHtml(user.role) +
+          escapeHtml(normalizeRole(user.role)) +
           "</span></td>" +
           "<td>" +
           formatDate(user.createdAt) +
@@ -426,13 +782,13 @@
           escapeHtml(user.id) +
           '">' +
           '<option value="member"' +
-          (user.role === "member" ? " selected" : "") +
+          (normalizeRole(user.role) === "member" ? " selected" : "") +
           ">Member</option>" +
           '<option value="officer"' +
-          (user.role === "officer" ? " selected" : "") +
+          (normalizeRole(user.role) === "officer" ? " selected" : "") +
           ">Officer</option>" +
           '<option value="admin"' +
-          (user.role === "admin" ? " selected" : "") +
+          (normalizeRole(user.role) === "admin" ? " selected" : "") +
           ">Admin</option>" +
           "</select>" +
           "</td>" +
@@ -447,7 +803,7 @@
       .join("");
   }
 
-  function initManageUsersPage() {
+  async function initManageUsersPage() {
     const tableBody = document.getElementById("usersTableBody");
     if (!tableBody) {
       return;
@@ -470,7 +826,7 @@
         const select = tableBody.querySelector(
           "select[data-user-role='" + userId + "']"
         );
-        const users = getUsers();
+        const users = tableBody.__users || getUsers();
         const user = users.find(function (item) {
           return item.id === userId;
         });
@@ -480,12 +836,50 @@
           return;
         }
 
-        user.role = select.value;
-        setUsers(users);
+        const nextRole = normalizeRole(select.value);
+        user.role = nextRole;
+
+        if (isApiConfigured()) {
+          showSpinner();
+            updateRemoteUserRole(userId, nextRole)
+            .then(function (updatedUser) {
+              const refreshedUsers = (tableBody.__users || getUsers()).map(function (item) {
+                return item.id === updatedUser.id ? updatedUser : item;
+              });
+              tableBody.__users = refreshedUsers;
+              const currentUser = getCurrentUser();
+              if (currentUser && currentUser.id === updatedUser.id) {
+                setCurrentUser({
+                  id: currentUser.id,
+                  name: currentUser.name,
+                  email: currentUser.email,
+                  role: updatedUser.role,
+                  token: currentUser.token,
+                  expiresAt: currentUser.expiresAt
+                });
+                setFlashMessage(
+                  "Your role was updated. You were redirected to the correct dashboard.",
+                  "info"
+                );
+                window.location.href = getRoleHome(updatedUser.role);
+                return;
+              }
+
+              showAlert("User role updated successfully.", "success");
+              renderUsersTable();
+            })
+            .catch(function (error) {
+              showAlert(error.message || "Unable to update that user.", "error");
+            })
+            .finally(function () {
+              hideSpinner();
+            });
+          return;
+        }
 
         const currentUser = getCurrentUser();
         if (currentUser && currentUser.id === user.id) {
-          currentUser.role = user.role;
+          currentUser.role = nextRole;
           setCurrentUser(currentUser);
           setFlashMessage(
             "Your role was updated. You were redirected to the correct dashboard.",
@@ -495,31 +889,41 @@
           return;
         }
 
+        tableBody.__users = users;
         showAlert("User role updated successfully.", "success");
         renderUsersTable();
       });
       tableBody.dataset.bound = "true";
     }
 
-    renderUsersTable();
+    await renderUsersTable();
   }
 
   // Dashboard hydration for member, officer, and admin home pages.
-  function refreshDashboardViews() {
+  async function refreshDashboardViews() {
     const page = document.body.dataset.page || "";
-    const reports = getReports().slice().sort(function (a, b) {
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
     const user = getCurrentUser();
 
     if (!user) {
       return;
     }
 
+    let reports = getReports().slice();
+    try {
+      reports = await loadReportsForCurrentUser();
+    } catch (error) {
+      if (!reports.length) {
+        showAlert(error.message || "Unable to load reports.", "error");
+        return;
+      }
+    }
+
+    reports = reports.slice().sort(function (a, b) {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
     if (page === "dashboard") {
-      const userReports = reports.filter(function (item) {
-        return item.reporterId === user.id;
-      });
+      const userReports = reports.slice();
       populateSummaryCards(userReports);
       renderStatusChart("memberChart", userReports);
 
@@ -554,7 +958,12 @@
 
     if (page === "admin-dashboard") {
       populateSummaryCards(reports);
-      const users = getUsers();
+      let users = getUsers();
+      try {
+        users = await loadUsersForAdmin();
+      } catch (_error) {
+        users = users || [];
+      }
       const userCount = document.getElementById("totalUsersCount");
       if (userCount) {
         userCount.textContent = String(users.length);
@@ -710,6 +1119,22 @@
     formatCurrency: formatCurrency,
     formatDate: formatDate,
     escapeHtml: escapeHtml,
+    normalizeRole: normalizeRole,
+    normalizeStatus: normalizeStatus,
+    getApiBaseUrl: getApiBaseUrl,
+    isApiConfigured: isApiConfigured,
+    apiRequest: apiRequest,
+    loadReportsForCurrentUser: loadReportsForCurrentUser,
+    loadReportsForAllUsers: loadReportsForAllUsers,
+    loadUsersForAdmin: loadUsersForAdmin,
+    loadReportDetail: loadReportDetail,
+    submitRemoteReport: submitRemoteReport,
+    updateRemoteReportStatus: updateRemoteReportStatus,
+    updateRemoteUserRole: updateRemoteUserRole,
+    loginRemoteUser: loginRemoteUser,
+    registerRemoteUser: registerRemoteUser,
+    logoutRemoteUser: logoutRemoteUser,
+    verifyCurrentSession: verifyCurrentSession,
     showAlert: showAlert,
     showSpinner: showSpinner,
     hideSpinner: hideSpinner,
@@ -721,8 +1146,17 @@
     refreshDashboardViews: refreshDashboardViews
   };
 
-  document.addEventListener("DOMContentLoaded", function () {
-    seedMockData();
+  document.addEventListener("DOMContentLoaded", async function () {
+    if (isApiConfigured()) {
+      try {
+        await verifyCurrentSession();
+      } catch (_error) {
+        clearCurrentUser();
+      }
+    } else {
+      seedMockData();
+    }
+
     ensureUiContainers();
     enforceAccess();
     wireCommonUi();
@@ -732,7 +1166,7 @@
       showAlert(flash.message, flash.type || "success");
     }
 
-    refreshDashboardViews();
-    initManageUsersPage();
+    await refreshDashboardViews();
+    await initManageUsersPage();
   });
 })();

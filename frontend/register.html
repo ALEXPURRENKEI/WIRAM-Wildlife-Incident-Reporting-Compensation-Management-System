@@ -26,7 +26,7 @@
     <main class="auth-wrap">
       <section class="auth-card">
         <h1>Create Account</h1>
-        <p class="muted">Register to submit or manage wildlife incident reports.</p>
+        <p class="muted">Register to submit wildlife incident reports as a community member.</p>
         <form id="registerForm" novalidate>
           <div class="form-grid">
             <div class="form-group full">
@@ -70,12 +70,10 @@
             </div>
 
             <div class="form-group full">
-              <label for="role">Role</label>
-              <select id="role" name="role" required>
-                <option value="member" selected>Community Member</option>
-                <option value="officer">Wildlife Officer</option>
-                <option value="admin">Administrator</option>
-              </select>
+              <div class="auth-note">
+                Public registration creates a <strong>community member</strong> account. Officer and
+                admin accounts are managed by the system administrator.
+              </div>
             </div>
           </div>
 
