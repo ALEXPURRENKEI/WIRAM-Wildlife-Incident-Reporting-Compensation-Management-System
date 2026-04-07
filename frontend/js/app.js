@@ -121,6 +121,16 @@
       document.body.appendChild(alertContainer);
     }
 
+    if (!document.getElementById("sidebarBackdrop")) {
+      const sidebarBackdrop = document.createElement("button");
+      sidebarBackdrop.id = "sidebarBackdrop";
+      sidebarBackdrop.className = "sidebar-backdrop";
+      sidebarBackdrop.type = "button";
+      sidebarBackdrop.setAttribute("aria-label", "Close navigation");
+      sidebarBackdrop.tabIndex = -1;
+      document.body.appendChild(sidebarBackdrop);
+    }
+
     if (!document.getElementById("loadingSpinner")) {
       const spinner = document.createElement("div");
       spinner.id = "loadingSpinner";
@@ -309,6 +319,32 @@
       button.addEventListener("click", function () {
         document.body.classList.toggle("sidebar-open");
       });
+    });
+
+    const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+    if (sidebarBackdrop && !sidebarBackdrop.dataset.bound) {
+      sidebarBackdrop.addEventListener("click", function () {
+        document.body.classList.remove("sidebar-open");
+      });
+      sidebarBackdrop.dataset.bound = "true";
+    }
+
+    document.querySelectorAll(".sidebar-nav a").forEach(function (link) {
+      link.addEventListener("click", function () {
+        document.body.classList.remove("sidebar-open");
+      });
+    });
+
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 900) {
+        document.body.classList.remove("sidebar-open");
+      }
+    });
+
+    window.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        document.body.classList.remove("sidebar-open");
+      }
     });
 
     document.querySelectorAll(".js-modal-close").forEach(function (button) {

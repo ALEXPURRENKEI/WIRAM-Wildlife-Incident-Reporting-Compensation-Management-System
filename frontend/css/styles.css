@@ -26,6 +26,7 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -56,6 +57,12 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+img,
+svg {
+  max-width: 100%;
+  display: block;
 }
 
 .container {
@@ -197,8 +204,12 @@ a:hover {
   z-index: 1;
   display: grid;
   gap: clamp(1.5rem, 4vw, 3rem);
-  grid-template-columns: 1.05fr 1fr;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   align-items: center;
+}
+
+.hero-copy h1 {
+  font-size: clamp(2.15rem, 5vw, 4rem);
 }
 
 .hero-copy h1 {
@@ -396,6 +407,7 @@ textarea:focus {
 }
 
 .sidebar {
+  position: relative;
   background: linear-gradient(180deg, #174a32 0%, #0f3323 100%);
   color: #ecf9f0;
   padding: 1.1rem 0.9rem;
@@ -452,10 +464,11 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
+  flex-wrap: wrap;
 }
 
 .topbar h1 {
-  font-size: 1.15rem;
+  font-size: clamp(1rem, 2.2vw, 1.15rem);
   margin: 0;
 }
 
@@ -463,12 +476,14 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   color: #2c4738;
   font-size: 0.95rem;
 }
 
 .content {
-  padding: 1rem;
+  padding: clamp(0.8rem, 2vw, 1rem);
 }
 
 .summary-grid {
@@ -493,7 +508,7 @@ textarea:focus {
 
 .summary-card h3 {
   font-family: "Manrope", sans-serif;
-  font-size: 1.6rem;
+  font-size: clamp(1.4rem, 3vw, 1.8rem);
   margin: 0;
 }
 
@@ -511,6 +526,7 @@ textarea:focus {
 
 .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -729,6 +745,30 @@ th {
   display: grid;
 }
 
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 10, 23, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 24;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  border: 0;
+  padding: 0;
+  appearance: none;
+  cursor: pointer;
+}
+
+body.sidebar-open .sidebar-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.sidebar-open {
+  overflow: hidden;
+}
+
 .spinner {
   width: 54px;
   height: 54px;
@@ -794,6 +834,7 @@ th {
     width: min(78vw, 280px);
     transform: translateX(-105%);
     transition: transform 0.25s ease;
+    box-shadow: 20px 0 50px rgba(3, 14, 12, 0.28);
   }
 
   body.sidebar-open .sidebar {
@@ -811,6 +852,15 @@ th {
   .modal-body-grid {
     grid-template-columns: 1fr;
   }
+
+  .topbar {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .topbar-user {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 660px) {
@@ -824,6 +874,58 @@ th {
   }
 
   .topbar {
-    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .public-nav-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.8rem 0;
+  }
+
+  .nav-links {
+    width: 100%;
+    gap: 0.6rem;
+  }
+
+  .nav-links a {
+    padding: 0.2rem 0;
+  }
+
+  .hero {
+    padding: 3.2rem 0 2.2rem;
+  }
+
+  .hero-actions {
+    width: 100%;
+  }
+
+  .hero-actions .btn {
+    width: 100%;
+  }
+
+  .highlight-card.neon-feature {
+    min-height: 220px;
+  }
+
+  .content {
+    padding: 0.75rem;
+  }
+
+  .card {
+    padding: 0.9rem;
+  }
+
+  .summary-card {
+    padding: 0.8rem;
+  }
+
+  .table-wrap {
+    margin: 0 -0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  table {
+    min-width: 680px;
   }
 }
