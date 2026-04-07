@@ -91,6 +91,8 @@ Important:
 - Do not commit `DATABASE_URL` into the frontend or repository.
 - The backend normalizes the raw Neon URI into a JDBC connection internally.
 - The token returned by the auth endpoints can be sent as `Authorization: Bearer <token>` or `X-Auth-Token`.
+- If PostgreSQL is unavailable or `DATABASE_URL` is missing, the backend falls back to an in-memory H2 database so the service can still boot on Render. For production persistence, keep `DATABASE_URL` configured.
+- The Render Blueprint defaults `SEED_DEMO_DATA` to `false` so production deploys start faster; turn it on only when you want demo records preloaded.
 
 ## API Summary
 

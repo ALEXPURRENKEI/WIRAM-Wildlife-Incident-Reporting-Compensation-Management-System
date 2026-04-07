@@ -4,12 +4,16 @@ import com.wiram.backend.config.DatabaseUrlNormalizer.DatabaseConnection;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class DatabaseConfig {
+
+  private static final Logger logger = LoggerFactory.getLogger(DatabaseConfig.class);
 
   @Bean
   public DataSource dataSource(
@@ -21,28 +25,35 @@ public class DatabaseConfig {
         firstNonBlank(databaseUrl, springDatasourceUrl);
 
     if (resolvedUrl == null || resolvedUrl.isBlank()) {
-      throw new IllegalStateException(
-          "DATABASE_URL or SPRING_DATASOURCE_URL is required for PostgreSQL connectivity.");
+      logger.warn("DATABASE_URL is not set. Falling back to in-memory H2 so the service can boot.");
+      return fallbackDataSource();
     }
 
-    DatabaseConnection connection = DatabaseUrlNormalizer.toConnection(resolvedUrl);
-    HikariConfig config = new HikariConfig();
-    config.setJdbcUrl(connection.jdbcUrl());
-    String username = firstNonBlank(springDatasourceUsername, connection.username());
-    String password = firstNonBlank(springDatasourcePassword, connection.password());
+    try {
+      DatabaseConnection connection = DatabaseUrlNormalizer.toConnection(resolvedUrl);
+      HikariConfig config = new HikariConfig();
+      config.setJdbcUrl(connection.jdbcUrl());
+      String username = firstNonBlank(springDatasourceUsername, connection.username());
+      String password = firstNonBlank(springDatasourcePassword, connection.password());
 
-    if (username != null && !username.isBlank()) {
-      config.setUsername(username);
+      if (username != null && !username.isBlank()) {
+        config.setUsername(username);
+      }
+
+      if (password != null && !password.isBlank()) {
+        config.setPassword(password);
+      }
+
+      config.setMaximumPoolSize(10);
+      config.setMinimumIdle(2);
+      config.setPoolName("wiram-pool");
+      return new HikariDataSource(config);
+    } catch (RuntimeException ex) {
+      logger.warn(
+          "PostgreSQL datasource could not start. Falling back to in-memory H2 so the service stays up.",
+          ex);
+      return fallbackDataSource();
     }
-
-    if (password != null && !password.isBlank()) {
-      config.setPassword(password);
-    }
-
-    config.setMaximumPoolSize(10);
-    config.setMinimumIdle(2);
-    config.setPoolName("wiram-pool");
-    return new HikariDataSource(config);
   }
 
   private String firstNonBlank(String first, String second) {
@@ -55,5 +66,17 @@ public class DatabaseConfig {
     }
 
     return null;
+  }
+
+  private DataSource fallbackDataSource() {
+    HikariConfig config = new HikariConfig();
+    config.setJdbcUrl(
+        "jdbc:h2:mem:wiram;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
+    config.setUsername("sa");
+    config.setPassword("");
+    config.setMaximumPoolSize(5);
+    config.setMinimumIdle(1);
+    config.setPoolName("wiram-h2-pool");
+    return new HikariDataSource(config);
   }
 }

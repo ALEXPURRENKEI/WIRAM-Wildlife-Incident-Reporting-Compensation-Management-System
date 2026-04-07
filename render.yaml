@@ -15,4 +15,4 @@ services:
       - key: CORS_ORIGIN
         value: "*"
       - key: SEED_DEMO_DATA
-        value: "true"
+        value: "false"
