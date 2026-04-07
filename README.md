@@ -129,7 +129,7 @@ Render deployment options for the backend:
   - Build command: `mvn -DskipTests package`
   - Start command: `java -Dserver.port=$PORT -jar target/wiram-spring-backend-1.0.0.jar`
 - Do not use `mvn spring-boot:run` as the Render start command. The runtime image does not include Maven, which is why the deploy failed.
-- The Docker image now uses a small entrypoint script, so the container starts the JAR directly even if Render still has an older Docker command saved in the service settings.
+- The Docker image starts the JAR directly, and the Spring Boot app reads Render's `PORT` environment variable at startup.
 
 ## Notes
 
