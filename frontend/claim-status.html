@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Claim Status | WIRAM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Merriweather:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body data-page="claim-status" data-auth="true" data-roles="member">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="dashboard.html">WIRAM</a>
+        <nav class="sidebar-nav">
+          <a href="dashboard.html">Dashboard</a>
+          <a href="report.html">Report Incident</a>
+          <a href="my-reports.html">My Reports</a>
+          <a class="active" href="claim-status.html">Claim Status</a>
+          <a href="#" class="js-logout">Logout</a>
+        </nav>
+        <div class="sidebar-footer">Member Portal</div>
+      </aside>
+
+      <div class="main-panel">
+        <header class="topbar">
+          <button class="icon-btn js-sidebar-toggle" type="button">Menu</button>
+          <h1>Compensation Claim Status</h1>
+          <div class="topbar-user">
+            <span class="js-user-name"></span>
+            <button class="btn btn-secondary btn-sm js-logout" type="button">Logout</button>
+          </div>
+        </header>
+
+        <main class="content">
+          <section class="summary-grid">
+            <article class="summary-card">
+              <p>Total Reports</p>
+              <h3 data-count="total">0</h3>
+            </article>
+            <article class="summary-card">
+              <p>Pending</p>
+              <h3 data-count="pending">0</h3>
+            </article>
+            <article class="summary-card">
+              <p>Verified</p>
+              <h3 data-count="verified">0</h3>
+            </article>
+            <article class="summary-card">
+              <p>Paid</p>
+              <h3 data-count="paid">0</h3>
+            </article>
+          </section>
+
+          <section class="grid-main">
+            <article class="card chart-card">
+              <h2>Claim Progress Chart</h2>
+              <canvas id="claimChart" aria-label="Claim status chart"></canvas>
+            </article>
+            <article class="card">
+              <h2>Status Flow</h2>
+              <p class="muted">Claims usually move through these steps:</p>
+              <div class="status-flow">
+                <div class="status-step">Pending</div>
+                <div class="status-step">Verified</div>
+                <div class="status-step">Rejected</div>
+                <div class="status-step">Paid</div>
+              </div>
+            </article>
+          </section>
+
+          <section class="card" style="margin-top: 1rem;">
+            <div class="filter-bar">
+              <div>
+                <h2>Track Your Claims</h2>
+              </div>
+              <div class="form-group">
+                <label for="claimStatusFilter">Filter by Status</label>
+                <select id="claimStatusFilter">
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Animal</th>
+                    <th>Incident</th>
+                    <th>Location</th>
+                    <th>Loss</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="claimStatusTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal" id="reportModal" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-top">
+          <h3>Incident Details</h3>
+          <button class="icon-btn js-modal-close" type="button" data-modal="reportModal">Close</button>
+        </div>
+        <div id="reportModalBody"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/app.js" defer></script>
+    <script src="js/auth.js" defer></script>
+    <script src="js/reports.js" defer></script>
+  </body>
+</html>

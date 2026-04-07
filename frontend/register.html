@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Register | WIRAM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Merriweather:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body data-page="register">
+    <nav class="public-nav">
+      <div class="container public-nav-inner">
+        <a class="brand" href="index.html">WIRAM</a>
+        <div class="nav-links">
+          <a href="index.html">Home</a>
+          <a href="login.html">Login</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="auth-wrap">
+      <section class="auth-card">
+        <h1>Create Account</h1>
+        <p class="muted">Register to submit or manage wildlife incident reports.</p>
+        <form id="registerForm" novalidate>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label for="name">Full Name</label>
+              <input id="name" name="name" type="text" required placeholder="Your full name" />
+            </div>
+
+            <div class="form-group full">
+              <label for="registerEmail">Email</label>
+              <input
+                id="registerEmail"
+                name="email"
+                type="email"
+                required
+                placeholder="you@example.com"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="registerPassword">Password</label>
+              <input
+                id="registerPassword"
+                name="password"
+                type="password"
+                required
+                minlength="6"
+                placeholder="At least 6 characters"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="confirmPassword">Confirm Password</label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                required
+                minlength="6"
+                placeholder="Repeat password"
+              />
+            </div>
+
+            <div class="form-group full">
+              <label for="role">Role</label>
+              <select id="role" name="role" required>
+                <option value="member" selected>Community Member</option>
+                <option value="officer">Wildlife Officer</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" type="submit">Create Account</button>
+        </form>
+
+        <p class="muted" style="margin-top: 0.9rem;">
+          Already registered? <a href="login.html">Sign in here</a>
+        </p>
+      </section>
+    </main>
+
+    <script src="js/app.js" defer></script>
+    <script src="js/auth.js" defer></script>
+  </body>
+</html>

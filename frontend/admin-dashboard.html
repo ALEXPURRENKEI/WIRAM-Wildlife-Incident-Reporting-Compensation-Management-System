@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard | WIRAM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Merriweather:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body data-page="admin-dashboard" data-auth="true" data-roles="admin">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="admin-dashboard.html">WIRAM</a>
+        <nav class="sidebar-nav">
+          <a class="active" href="admin-dashboard.html">Dashboard</a>
+          <a href="manage-users.html">Manage Users</a>
+          <a href="reports.html">All Reports</a>
+          <a href="#" class="js-logout">Logout</a>
+        </nav>
+        <div class="sidebar-footer">Admin Portal</div>
+      </aside>
+
+      <div class="main-panel">
+        <header class="topbar">
+          <button class="icon-btn js-sidebar-toggle" type="button">Menu</button>
+          <h1>Administrator Dashboard</h1>
+          <div class="topbar-user">
+            <span class="js-user-name"></span>
+            <button class="btn btn-secondary btn-sm js-logout" type="button">Logout</button>
+          </div>
+        </header>
+
+        <main class="content">
+          <section class="summary-grid">
+            <article class="summary-card">
+              <p>Total Reports</p>
+              <h3 data-count="total">0</h3>
+            </article>
+            <article class="summary-card">
+              <p>Pending</p>
+              <h3 data-count="pending">0</h3>
+            </article>
+            <article class="summary-card">
+              <p>Verified</p>
+              <h3 data-count="verified">0</h3>
+            </article>
+            <article class="summary-card">
+              <p>Paid</p>
+              <h3 data-count="paid">0</h3>
+            </article>
+          </section>
+
+          <section class="grid-main">
+            <article class="card chart-card">
+              <h2>System Incident Status</h2>
+              <canvas id="adminChart" aria-label="Admin chart"></canvas>
+            </article>
+            <article class="card">
+              <h2>System Metrics</h2>
+              <p class="muted">Users in the platform</p>
+              <h3 id="totalUsersCount" style="font-size: 2rem; margin-bottom: 1rem;">0</h3>
+              <p><a class="btn btn-primary" href="manage-users.html">Manage Users</a></p>
+              <p><a class="btn btn-secondary" href="reports.html">Open All Reports</a></p>
+            </article>
+          </section>
+
+          <section class="card" style="margin-top: 1rem;">
+            <h2>Recent Incident Reports</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Reporter</th>
+                    <th>Animal</th>
+                    <th>Incident</th>
+                    <th>Location</th>
+                    <th>Loss</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="adminRecentTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal" id="reportModal" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-top">
+          <h3>Incident Details</h3>
+          <button class="icon-btn js-modal-close" type="button" data-modal="reportModal">Close</button>
+        </div>
+        <div id="reportModalBody"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/app.js" defer></script>
+    <script src="js/auth.js" defer></script>
+    <script src="js/reports.js" defer></script>
+  </body>
+</html>

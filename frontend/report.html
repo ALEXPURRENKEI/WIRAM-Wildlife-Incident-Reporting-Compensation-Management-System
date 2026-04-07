@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Report Incident | WIRAM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Merriweather:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body data-page="report" data-auth="true" data-roles="member">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="dashboard.html">WIRAM</a>
+        <nav class="sidebar-nav">
+          <a href="dashboard.html">Dashboard</a>
+          <a class="active" href="report.html">Report Incident</a>
+          <a href="my-reports.html">My Reports</a>
+          <a href="claim-status.html">Claim Status</a>
+          <a href="#" class="js-logout">Logout</a>
+        </nav>
+        <div class="sidebar-footer">Member Portal</div>
+      </aside>
+
+      <div class="main-panel">
+        <header class="topbar">
+          <button class="icon-btn js-sidebar-toggle" type="button">Menu</button>
+          <h1>Report Wildlife Incident</h1>
+          <div class="topbar-user">
+            <span class="js-user-name"></span>
+            <button class="btn btn-secondary btn-sm js-logout" type="button">Logout</button>
+          </div>
+        </header>
+
+        <main class="content">
+          <section class="grid-main">
+            <article class="card">
+              <h2>Incident Form</h2>
+              <p class="muted">Complete the details accurately for faster verification.</p>
+              <form id="reportForm" novalidate>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="animalType">Animal Type</label>
+                    <select id="animalType" name="animalType" required>
+                      <option value="">Select animal</option>
+                      <option>Elephant</option>
+                      <option>Lion</option>
+                      <option>Buffalo</option>
+                      <option>Leopard</option>
+                      <option>Hyena</option>
+                      <option>Crocodile</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="incidentType">Incident Type</label>
+                    <select id="incidentType" name="incidentType" required>
+                      <option value="">Select incident type</option>
+                      <option>Crop Damage</option>
+                      <option>Livestock Attack</option>
+                      <option>Property Damage</option>
+                      <option>Human Injury</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group full">
+                    <label for="location">Location</label>
+                    <input
+                      id="location"
+                      name="location"
+                      type="text"
+                      required
+                      placeholder="Village / Subcounty / County"
+                    />
+                  </div>
+
+                  <div class="form-group full">
+                    <label for="description">Description</label>
+                    <textarea
+                      id="description"
+                      name="description"
+                      required
+                      placeholder="Describe what happened, when it happened, and impact."
+                    ></textarea>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="estimatedLoss">Estimated Loss (USD)</label>
+                    <input id="estimatedLoss" name="estimatedLoss" type="number" min="1" required />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="reportImage">Upload Evidence Image</label>
+                    <input id="reportImage" name="reportImage" type="file" accept="image/*" />
+                  </div>
+
+                  <div class="form-group full">
+                    <img
+                      id="imagePreview"
+                      class="upload-preview hidden"
+                      alt="Incident evidence preview"
+                    />
+                  </div>
+                </div>
+
+                <button class="btn btn-primary" type="submit">Submit Report</button>
+              </form>
+            </article>
+
+            <article class="card">
+              <h2>Reporting Tips</h2>
+              <ul class="tips-list muted">
+                <li>Provide accurate location details for field verification.</li>
+                <li>Attach clear photo evidence when available.</li>
+                <li>Describe losses using approximate numbers and context.</li>
+                <li>Keep your phone/email available for follow-up.</li>
+              </ul>
+              <p style="margin-top: 1rem;">
+                <a class="btn btn-secondary" href="my-reports.html">View My Reports</a>
+              </p>
+            </article>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="js/app.js" defer></script>
+    <script src="js/auth.js" defer></script>
+    <script src="js/reports.js" defer></script>
+  </body>
+</html>

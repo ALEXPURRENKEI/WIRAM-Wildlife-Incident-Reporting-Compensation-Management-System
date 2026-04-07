@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verify Incidents | WIRAM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Merriweather:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body data-page="verify-incidents" data-auth="true" data-roles="officer">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="officer-dashboard.html">WIRAM</a>
+        <nav class="sidebar-nav">
+          <a href="officer-dashboard.html">Dashboard</a>
+          <a class="active" href="verify-incidents.html">Verify Incidents</a>
+          <a href="#" class="js-logout">Logout</a>
+        </nav>
+        <div class="sidebar-footer">Officer Portal</div>
+      </aside>
+
+      <div class="main-panel">
+        <header class="topbar">
+          <button class="icon-btn js-sidebar-toggle" type="button">Menu</button>
+          <h1>Incident Verification Queue</h1>
+          <div class="topbar-user">
+            <span class="js-user-name"></span>
+            <button class="btn btn-secondary btn-sm js-logout" type="button">Logout</button>
+          </div>
+        </header>
+
+        <main class="content">
+          <section class="card">
+            <div class="filter-bar">
+              <div>
+                <h2>Verify and Update Status</h2>
+                <p class="muted">Review each incident and set status appropriately.</p>
+              </div>
+              <div class="form-group">
+                <label for="verifyFilter">Filter by Status</label>
+                <select id="verifyFilter">
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Reporter</th>
+                    <th>Animal</th>
+                    <th>Incident</th>
+                    <th>Location</th>
+                    <th>Loss</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="verifyTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal" id="reportModal" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-top">
+          <h3>Incident Details</h3>
+          <button class="icon-btn js-modal-close" type="button" data-modal="reportModal">Close</button>
+        </div>
+        <div id="reportModalBody"></div>
+      </div>
+    </div>
+
+    <script src="js/app.js" defer></script>
+    <script src="js/auth.js" defer></script>
+    <script src="js/reports.js" defer></script>
+  </body>
+</html>
