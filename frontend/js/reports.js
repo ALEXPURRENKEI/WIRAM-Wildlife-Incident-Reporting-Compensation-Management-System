@@ -1,6 +1,11 @@
 (function () {
   "use strict";
 
+  const MAX_IMAGE_DIMENSION = 1600;
+  const COMPRESSED_IMAGE_TYPE = "image/jpeg";
+  const COMPRESSED_IMAGE_QUALITY = 0.82;
+  const MAX_LOCAL_EVIDENCE_LENGTH = 350000;
+
   function readAsDataUrl(file) {
     return new Promise(function (resolve, reject) {
       const reader = new FileReader();
@@ -12,6 +17,63 @@
       };
       reader.readAsDataURL(file);
     });
+  }
+
+  function loadImageElement(file) {
+    return new Promise(function (resolve, reject) {
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+
+      image.onload = function () {
+        URL.revokeObjectURL(objectUrl);
+        resolve(image);
+      };
+
+      image.onerror = function () {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Unable to read the selected image."));
+      };
+
+      image.src = objectUrl;
+    });
+  }
+
+  async function buildEvidenceData(file) {
+    if (!file || !file.type || file.type.indexOf("image/") !== 0) {
+      return "";
+    }
+
+    const image = await loadImageElement(file);
+    const largestSide = Math.max(image.width, image.height);
+    const ratio = largestSide > MAX_IMAGE_DIMENSION ? MAX_IMAGE_DIMENSION / largestSide : 1;
+    const width = Math.max(1, Math.round(image.width * ratio));
+    const height = Math.max(1, Math.round(image.height * ratio));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return readAsDataUrl(file);
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const compressed = canvas.toDataURL(COMPRESSED_IMAGE_TYPE, COMPRESSED_IMAGE_QUALITY);
+    const original = await readAsDataUrl(file);
+    return compressed.length < original.length ? compressed : original;
+  }
+
+  function isStorageQuotaError(error) {
+    if (!error) {
+      return false;
+    }
+
+    return (
+      error.name === "QuotaExceededError" ||
+      error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      /quota/i.test(String(error.message || ""))
+    );
   }
 
   function normalizeStatus(status) {
@@ -336,8 +398,14 @@
       return;
     }
 
-    imageInput.addEventListener("change", async function () {
+    imageInput.addEventListener("change", function () {
       const file = imageInput.files && imageInput.files[0];
+      const previousObjectUrl = preview.dataset.objectUrl;
+      if (previousObjectUrl) {
+        URL.revokeObjectURL(previousObjectUrl);
+        delete preview.dataset.objectUrl;
+      }
+
       if (!file) {
         preview.src = "";
         preview.classList.add("hidden");
@@ -345,8 +413,9 @@
       }
 
       try {
-        const dataUrl = await readAsDataUrl(file);
-        preview.src = dataUrl;
+        const objectUrl = URL.createObjectURL(file);
+        preview.src = objectUrl;
+        preview.dataset.objectUrl = objectUrl;
         preview.classList.remove("hidden");
       } catch (_error) {
         window.WIRAM.showAlert("Could not preview that image.", "error");
@@ -389,13 +458,19 @@
 
     let evidenceName = "";
     let evidenceData = "";
+    let localImageSkipped = false;
 
     try {
       window.WIRAM.showSpinner();
 
       if (imageFile && imageFile.name) {
         evidenceName = imageFile.name;
-        evidenceData = await readAsDataUrl(imageFile);
+        evidenceData = await buildEvidenceData(imageFile);
+      }
+
+      if (!window.WIRAM.isApiConfigured() && evidenceData.length > MAX_LOCAL_EVIDENCE_LENGTH) {
+        evidenceData = "";
+        localImageSkipped = true;
       }
 
       if (window.WIRAM.isApiConfigured()) {
@@ -426,10 +501,27 @@
           createdAt: now,
           updatedAt: now
         });
-        window.WIRAM.setReports(reports);
+        try {
+          window.WIRAM.setReports(reports);
+        } catch (storageError) {
+          if (!evidenceData || !isStorageQuotaError(storageError)) {
+            throw storageError;
+          }
+
+          reports[0].evidenceData = "";
+          localImageSkipped = true;
+          window.WIRAM.setReports(reports);
+        }
       }
 
-      window.WIRAM.showAlert("Incident report submitted successfully.", "success");
+      if (localImageSkipped) {
+        window.WIRAM.showAlert(
+          "Incident report submitted, but the image was too large for offline browser storage.",
+          "success"
+        );
+      } else {
+        window.WIRAM.showAlert("Incident report submitted successfully.", "success");
+      }
 
       if (form) {
         form.reset();
@@ -437,6 +529,11 @@
 
       const preview = document.getElementById("imagePreview");
       if (preview) {
+        const previewObjectUrl = preview.dataset.objectUrl;
+        if (previewObjectUrl) {
+          URL.revokeObjectURL(previewObjectUrl);
+          delete preview.dataset.objectUrl;
+        }
         preview.src = "";
         preview.classList.add("hidden");
       }

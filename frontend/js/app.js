@@ -6,7 +6,7 @@
     window.WIRAM_CONFIG.API_BASE_URL =
       window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
         ? "http://localhost:8080"
-        : "";
+        : "https://wiram-spring-backend.onrender.com";
   }
 
   // Centralized localStorage keys used across the whole application.
