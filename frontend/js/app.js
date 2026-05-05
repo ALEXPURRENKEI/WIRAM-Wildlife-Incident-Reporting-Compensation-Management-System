@@ -1013,7 +1013,7 @@
         },
         {
           id: "USR-ADMIN-001",
-          name: "Admin Peter Kamau",
+          name: "Admin Alex Pure",
           email: "admin@wiram.org",
           password: "password123",
           role: "admin",
