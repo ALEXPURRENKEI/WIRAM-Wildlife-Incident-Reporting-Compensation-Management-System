@@ -29,6 +29,10 @@ public class User extends BaseEntity {
   @Column(nullable = false)
   private UserRole role;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "payment_mode")
+  private PaymentMode paymentMode;
+
   @PrePersist
   public void ensureId() {
     if (id == null) {
@@ -74,5 +78,13 @@ public class User extends BaseEntity {
 
   public void setRole(UserRole role) {
     this.role = role;
+  }
+
+  public PaymentMode getPaymentMode() {
+    return paymentMode;
+  }
+
+  public void setPaymentMode(PaymentMode paymentMode) {
+    this.paymentMode = paymentMode;
   }
 }

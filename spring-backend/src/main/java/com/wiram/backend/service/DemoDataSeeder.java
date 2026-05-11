@@ -1,25 +1,28 @@
 package com.wiram.backend.service;
 
-import com.wiram.backend.entity.Report;
-import com.wiram.backend.entity.ReportStatus;
-import com.wiram.backend.entity.ReportStatusHistory;
-import com.wiram.backend.entity.User;
-import com.wiram.backend.entity.UserRole;
-import com.wiram.backend.repository.ReportRepository;
-import com.wiram.backend.repository.ReportStatusHistoryRepository;
-import com.wiram.backend.repository.UserRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.wiram.backend.entity.Report;
+import com.wiram.backend.entity.ReportStatus;
+import com.wiram.backend.entity.ReportStatusHistory;
+import com.wiram.backend.entity.User;
+import com.wiram.backend.entity.UserRole;
+import com.wiram.backend.entity.PaymentMode;
+import com.wiram.backend.repository.ReportRepository;
+import com.wiram.backend.repository.ReportStatusHistoryRepository;
+import com.wiram.backend.repository.UserRepository;
 
 @Component
 public class DemoDataSeeder implements ApplicationRunner {
@@ -54,7 +57,12 @@ public class DemoDataSeeder implements ApplicationRunner {
         ensureUser("Community Member", "member@wiram.org", UserRole.MEMBER, "password123");
     User officer =
         ensureUser("Wildlife Officer", "officer@wiram.org", UserRole.OFFICER, "password123");
-    User admin = ensureUser("System Admin", "admin@wiram.org", UserRole.ADMIN, "password123");
+    User admin = ensureUser("Admin Alex Purenkei", "admin@wiram.org", UserRole.ADMIN, "password123");
+
+    member.setPaymentMode(PaymentMode.MPESA);
+    officer.setPaymentMode(PaymentMode.BANK_TRANSFER);
+    admin.setPaymentMode(PaymentMode.BANK_TRANSFER);
+    userRepository.saveAll(List.of(member, officer, admin));
 
     if (reportRepository.count() == 0) {
       List<Report> seededReports =
@@ -94,6 +102,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     report.setReviewedAt(null);
     report.setCreatedAt(submittedAt);
     report.setUpdatedAt(submittedAt);
+    report.setPaymentMode(PaymentMode.MPESA);
     report.setEvidenceData(sampleEvidence("Elephant raid"));
     return report;
   }
@@ -108,6 +117,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     report.setReviewedAt(reviewedAt);
     report.setCreatedAt(submittedAt);
     report.setUpdatedAt(reviewedAt);
+    report.setPaymentMode(PaymentMode.BANK_TRANSFER);
     report.setEvidenceData(sampleEvidence("Buffalo incident"));
     return report;
   }
@@ -122,6 +132,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     report.setReviewedAt(reviewedAt);
     report.setCreatedAt(submittedAt);
     report.setUpdatedAt(reviewedAt);
+    report.setPaymentMode(PaymentMode.CASH);
     report.setEvidenceData(sampleEvidence("Crocodile incident"));
     return report;
   }
@@ -137,6 +148,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     report.setReviewedAt(paidAt);
     report.setCreatedAt(submittedAt);
     report.setUpdatedAt(paidAt);
+    report.setPaymentMode(PaymentMode.MPESA);
     report.setEvidenceData(sampleEvidence("Hippo incident"));
     return report;
   }

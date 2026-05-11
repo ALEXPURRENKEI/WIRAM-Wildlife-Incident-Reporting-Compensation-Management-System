@@ -5,6 +5,7 @@ import com.wiram.backend.dto.ReportDetailResponse;
 import com.wiram.backend.dto.ReportListResponse;
 import com.wiram.backend.dto.ReportStatusHistoryResponse;
 import com.wiram.backend.dto.UpdateReportStatusRequest;
+import com.wiram.backend.dto.UpdatePaymentModeRequest;
 import com.wiram.backend.entity.ReportStatus;
 import com.wiram.backend.entity.User;
 import com.wiram.backend.service.AuthService;
@@ -80,5 +81,14 @@ public class ReportController {
       @Valid @RequestBody UpdateReportStatusRequest payload) {
     User currentUser = authService.requireUser(request);
     return ResponseEntity.ok(reportService.updateStatus(currentUser, id, payload));
+  }
+
+  @PatchMapping("/{id}/payment-mode")
+  public ResponseEntity<ReportDetailResponse> updatePaymentMode(
+      HttpServletRequest request,
+      @PathVariable UUID id,
+      @Valid @RequestBody UpdatePaymentModeRequest payload) {
+    User currentUser = authService.requireUser(request);
+    return ResponseEntity.ok(reportService.updatePaymentMode(currentUser, id, payload));
   }
 }

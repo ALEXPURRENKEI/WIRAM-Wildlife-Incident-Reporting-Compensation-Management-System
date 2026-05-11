@@ -9,6 +9,8 @@ import com.wiram.backend.exception.NotFoundException;
 import com.wiram.backend.repository.UserRepository;
 import com.wiram.backend.util.AccessControl;
 import com.wiram.backend.util.ApiMapper;
+import com.wiram.backend.dto.UpdatePaymentModeRequest;
+import com.wiram.backend.dto.PaymentModeResponse;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Sort;
@@ -56,5 +58,12 @@ public class UserService {
   @Transactional(readOnly = true)
   public long countByRole(UserRole role) {
     return userRepository.countByRole(role);
+  }
+
+  @Transactional
+  public PaymentModeResponse updatePaymentMode(User currentUser, UpdatePaymentModeRequest request) {
+    currentUser.setPaymentMode(request.getPaymentMode());
+    User updated = userRepository.save(currentUser);
+    return new PaymentModeResponse(updated.getPaymentMode());
   }
 }

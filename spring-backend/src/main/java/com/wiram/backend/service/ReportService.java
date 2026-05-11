@@ -5,6 +5,7 @@ import com.wiram.backend.dto.ReportDetailResponse;
 import com.wiram.backend.dto.ReportListResponse;
 import com.wiram.backend.dto.ReportStatusHistoryResponse;
 import com.wiram.backend.dto.UpdateReportStatusRequest;
+import com.wiram.backend.dto.UpdatePaymentModeRequest;
 import com.wiram.backend.entity.Report;
 import com.wiram.backend.entity.ReportStatus;
 import com.wiram.backend.entity.ReportStatusHistory;
@@ -129,6 +130,24 @@ public class ReportService {
     historyRepository.save(history);
 
     return buildDetailResponse(report.getId());
+  }
+
+  @Transactional
+  public ReportDetailResponse updatePaymentMode(
+      User currentUser, UUID reportId, UpdatePaymentModeRequest request) {
+    Report report = fetchReport(reportId);
+
+    if (currentUser.getRole() == UserRole.MEMBER) {
+      if (!currentUser.getId().equals(report.getReporter().getId())) {
+        throw new ForbiddenException("You can only update payment mode for your own reports.");
+      }
+    } else if (currentUser.getRole() != UserRole.OFFICER && currentUser.getRole() != UserRole.ADMIN) {
+      throw new ForbiddenException("You do not have permission to update payment mode.");
+    }
+
+    report.setPaymentMode(request.getPaymentMode());
+    reportRepository.save(report);
+    return buildDetailResponse(report);
   }
 
   private ReportDetailResponse buildDetailResponse(UUID reportId) {

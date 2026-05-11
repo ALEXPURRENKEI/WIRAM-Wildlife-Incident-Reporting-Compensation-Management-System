@@ -60,6 +60,10 @@ public class Report extends BaseEntity {
   @Column(name = "reviewed_at")
   private OffsetDateTime reviewedAt;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "payment_mode")
+  private PaymentMode paymentMode;
+
   @PrePersist
   public void ensureId() {
     if (id == null) {
@@ -169,5 +173,13 @@ public class Report extends BaseEntity {
 
   public void setReviewedAt(OffsetDateTime reviewedAt) {
     this.reviewedAt = reviewedAt;
+  }
+
+  public PaymentMode getPaymentMode() {
+    return paymentMode;
+  }
+
+  public void setPaymentMode(PaymentMode paymentMode) {
+    this.paymentMode = paymentMode;
   }
 }

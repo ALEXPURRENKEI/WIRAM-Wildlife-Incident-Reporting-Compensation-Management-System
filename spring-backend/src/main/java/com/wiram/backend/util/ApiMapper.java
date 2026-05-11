@@ -19,6 +19,7 @@ public final class ApiMapper {
         user.getName(),
         user.getEmail(),
         user.getRole(),
+        user.getPaymentMode(),
         user.getCreatedAt(),
         user.getUpdatedAt());
   }
@@ -31,6 +32,7 @@ public final class ApiMapper {
         report.getLocation(),
         report.getEstimatedLoss(),
         report.getStatus(),
+        report.getPaymentMode(),
         report.getReporter() == null ? null : report.getReporter().getName(),
         report.getReporter() == null ? null : report.getReporter().getEmail(),
         report.getReviewedByName(),
@@ -52,6 +54,7 @@ public final class ApiMapper {
         report.getEvidenceName(),
         report.getEvidenceData(),
         report.getStatus(),
+        report.getPaymentMode(),
         report.getReporter() == null ? null : report.getReporter().getName(),
         report.getReporter() == null ? null : report.getReporter().getEmail(),
         report.getReviewedByName(),
