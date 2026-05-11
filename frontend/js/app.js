@@ -352,7 +352,7 @@
       method: "POST",
       body: JSON.stringify(payload)
     });
-    return normalizeReportRecord(response);
+    return normalizeReportRecord(response.report);
   }
 
   async function updateRemoteReportStatus(reportId, status, notes) {
