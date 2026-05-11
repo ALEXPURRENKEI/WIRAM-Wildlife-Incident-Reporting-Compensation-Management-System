@@ -3,10 +3,12 @@
 
   window.WIRAM_CONFIG = window.WIRAM_CONFIG || {};
   if (!window.WIRAM_CONFIG.API_BASE_URL) {
+    const isLocalFrontend =
+      window.location.protocol === "file:" ||
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
     window.WIRAM_CONFIG.API_BASE_URL =
-      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-        ? "http://localhost:8080"
-        : "https://wiram-spring-backend.onrender.com";
+      isLocalFrontend ? "http://localhost:8080" : "https://wiram-spring-backend.onrender.com";
   }
 
   // Centralized localStorage keys used across the whole application.
@@ -297,6 +299,7 @@
     const endpoint = currentUser.role === "member" ? "/api/reports/my" : "/api/reports";
     const payload = await apiRequest(endpoint);
     const reports = Array.isArray(payload) ? payload.map(normalizeReportRecord) : [];
+    updateReportsCache(reports);
     return reports;
   }
 
@@ -307,6 +310,7 @@
 
     const payload = await apiRequest("/api/reports");
     const reports = Array.isArray(payload) ? payload.map(normalizeReportRecord) : [];
+    updateReportsCache(reports);
     return reports;
   }
 
@@ -317,7 +321,51 @@
 
     const payload = await apiRequest("/api/users");
     const users = Array.isArray(payload) ? payload.map(normalizeUserRecord) : [];
+    updateUsersCache(users);
     return users;
+  }
+
+  async function loadDashboardData() {
+    if (!isApiConfigured()) {
+      const reports = getReports();
+      const users = getUsers();
+      const counts = statusCounts(reports);
+
+      return {
+        totalReports: counts.total,
+        pendingReports: counts.pending,
+        verifiedReports: counts.verified,
+        rejectedReports: counts.rejected,
+        paidReports: counts.paid,
+        memberCount: users.filter(function (user) {
+          return normalizeRole(user.role) === "member";
+        }).length,
+        officerCount: users.filter(function (user) {
+          return normalizeRole(user.role) === "officer";
+        }).length,
+        adminCount: users.filter(function (user) {
+          return normalizeRole(user.role) === "admin";
+        }).length,
+        recentReports: reports.slice(0, 8).map(normalizeReportRecord)
+      };
+    }
+
+    const payload = await apiRequest("/api/dashboard");
+    const recentReports = Array.isArray(payload.recentReports)
+      ? payload.recentReports.map(normalizeReportRecord)
+      : [];
+
+    return {
+      totalReports: Number(payload.totalReports) || 0,
+      pendingReports: Number(payload.pendingReports) || 0,
+      verifiedReports: Number(payload.verifiedReports) || 0,
+      rejectedReports: Number(payload.rejectedReports) || 0,
+      paidReports: Number(payload.paidReports) || 0,
+      memberCount: Number(payload.memberCount) || 0,
+      officerCount: Number(payload.officerCount) || 0,
+      adminCount: Number(payload.adminCount) || 0,
+      recentReports: recentReports
+    };
   }
 
   async function loadReportDetail(reportId) {
@@ -544,6 +592,41 @@
         : 0;
       node.textContent = String(value);
     });
+  }
+
+  function populateSummaryCardsFromDashboard(dashboard, root) {
+    const scope = root || document;
+    const counts = {
+      total: Number(dashboard.totalReports) || 0,
+      pending: Number(dashboard.pendingReports) || 0,
+      verified: Number(dashboard.verifiedReports) || 0,
+      rejected: Number(dashboard.rejectedReports) || 0,
+      paid: Number(dashboard.paidReports) || 0
+    };
+
+    scope.querySelectorAll("[data-count]").forEach(function (node) {
+      const key = node.getAttribute("data-count");
+      const value = Object.prototype.hasOwnProperty.call(counts, key) ? counts[key] : 0;
+      node.textContent = String(value);
+    });
+  }
+
+  function reportsFromDashboardCounts(dashboard) {
+    const counts = [
+      { status: "pending", count: Number(dashboard.pendingReports) || 0 },
+      { status: "verified", count: Number(dashboard.verifiedReports) || 0 },
+      { status: "rejected", count: Number(dashboard.rejectedReports) || 0 },
+      { status: "paid", count: Number(dashboard.paidReports) || 0 }
+    ];
+    const reports = [];
+
+    counts.forEach(function (item) {
+      for (let index = 0; index < item.count; index += 1) {
+        reports.push({ status: item.status });
+      }
+    });
+
+    return reports;
   }
 
   // Renders Chart.js doughnut charts if Chart.js is present on the page.
@@ -909,10 +992,25 @@
     }
 
     let reports = getReports().slice();
+    let dashboard = null;
     try {
-      reports = await loadReportsForCurrentUser();
+      dashboard = await loadDashboardData();
+      if (page === "officer-dashboard") {
+        reports = await loadReportsForCurrentUser();
+      } else {
+        reports =
+          Array.isArray(dashboard.recentReports) && dashboard.recentReports.length
+            ? dashboard.recentReports
+            : await loadReportsForCurrentUser();
+      }
     } catch (error) {
-      if (!reports.length) {
+      try {
+        reports = await loadReportsForCurrentUser();
+      } catch (_reportsError) {
+        // Keep the local cache fallback below.
+      }
+
+      if (!reports.length && !dashboard) {
         showAlert(error.message || "Unable to load reports.", "error");
         return;
       }
@@ -924,8 +1022,13 @@
 
     if (page === "dashboard") {
       const userReports = reports.slice();
-      populateSummaryCards(userReports);
-      renderStatusChart("memberChart", userReports);
+      if (dashboard) {
+        populateSummaryCardsFromDashboard(dashboard);
+        renderStatusChart("memberChart", reportsFromDashboardCounts(dashboard));
+      } else {
+        populateSummaryCards(userReports);
+        renderStatusChart("memberChart", userReports);
+      }
 
       if (typeof window.displayReports === "function") {
         window.displayReports({
@@ -939,8 +1042,13 @@
     }
 
     if (page === "officer-dashboard") {
-      populateSummaryCards(reports);
-      renderStatusChart("officerChart", reports);
+      if (dashboard) {
+        populateSummaryCardsFromDashboard(dashboard);
+        renderStatusChart("officerChart", reportsFromDashboardCounts(dashboard));
+      } else {
+        populateSummaryCards(reports);
+        renderStatusChart("officerChart", reports);
+      }
 
       if (typeof window.displayReports === "function") {
         const pending = reports.filter(function (item) {
@@ -957,7 +1065,11 @@
     }
 
     if (page === "admin-dashboard") {
-      populateSummaryCards(reports);
+      if (dashboard) {
+        populateSummaryCardsFromDashboard(dashboard);
+      } else {
+        populateSummaryCards(reports);
+      }
       let users = getUsers();
       try {
         users = await loadUsersForAdmin();
@@ -966,9 +1078,11 @@
       }
       const userCount = document.getElementById("totalUsersCount");
       if (userCount) {
-        userCount.textContent = String(users.length);
+        userCount.textContent = dashboard
+          ? String(dashboard.memberCount + dashboard.officerCount + dashboard.adminCount)
+          : String(users.length);
       }
-      renderStatusChart("adminChart", reports);
+      renderStatusChart("adminChart", dashboard ? reportsFromDashboardCounts(dashboard) : reports);
 
       if (typeof window.displayReports === "function") {
         window.displayReports({
@@ -1127,6 +1241,7 @@
     loadReportsForCurrentUser: loadReportsForCurrentUser,
     loadReportsForAllUsers: loadReportsForAllUsers,
     loadUsersForAdmin: loadUsersForAdmin,
+    loadDashboardData: loadDashboardData,
     loadReportDetail: loadReportDetail,
     submitRemoteReport: submitRemoteReport,
     updateRemoteReportStatus: updateRemoteReportStatus,
