@@ -6,32 +6,28 @@ const DEMO_USERS = [
     name: "Miriam Njeri",
     email: "member@wiram.org",
     password: "password123",
-    role: "member",
-    paymentMode: "MPESA"
+    role: "member"
   },
   {
     id: "22222222-2222-2222-2222-222222222222",
     name: "Daniel Mwangi",
     email: "community@wiram.org",
     password: "password123",
-    role: "member",
-    paymentMode: "MPESA"
+    role: "member"
   },
   {
     id: "33333333-3333-3333-3333-333333333333",
     name: "Officer Grace Otieno",
     email: "officer@wiram.org",
     password: "password123",
-    role: "officer",
-    paymentMode: "BANK_TRANSFER"
+    role: "officer"
   },
   {
     id: "44444444-4444-4444-4444-444444444444",
     name: "Admin Alex Pure",
     email: "admin@wiram.org",
     password: "password123",
-    role: "admin",
-    paymentMode: "BANK_TRANSFER"
+    role: "admin"
   }
 ];
 
@@ -45,7 +41,6 @@ const DEMO_REPORTS = [
     description: "A herd of elephants destroyed maize on two acres overnight.",
     estimatedLoss: 1400,
     status: "pending",
-    paymentMode: "MPESA",
     createdAt: "2026-03-20T07:20:00.000Z"
   },
   {
@@ -57,7 +52,6 @@ const DEMO_REPORTS = [
     description: "Two goats were killed near the grazing enclosure.",
     estimatedLoss: 500,
     status: "verified",
-    paymentMode: "BANK_TRANSFER",
     reviewedByEmail: "officer@wiram.org",
     createdAt: "2026-03-18T14:10:00.000Z",
     reviewedAt: "2026-03-19T08:30:00.000Z"
@@ -71,7 +65,6 @@ const DEMO_REPORTS = [
     description: "Fence and water tank were damaged by buffalo crossing.",
     estimatedLoss: 850,
     status: "rejected",
-    paymentMode: "CASH",
     reviewedByEmail: "officer@wiram.org",
     createdAt: "2026-03-16T10:12:00.000Z",
     reviewedAt: "2026-03-17T11:40:00.000Z"
@@ -85,7 +78,6 @@ const DEMO_REPORTS = [
     description: "Three sheep missing after a nighttime hyena raid.",
     estimatedLoss: 620,
     status: "paid",
-    paymentMode: "MPESA",
     reviewedByEmail: "admin@wiram.org",
     createdAt: "2026-03-13T06:45:00.000Z",
     reviewedAt: "2026-03-23T10:00:00.000Z"
@@ -99,7 +91,6 @@ const DEMO_REPORTS = [
     description: "Farmer sustained arm injuries while guarding livestock.",
     estimatedLoss: 1100,
     status: "pending",
-    paymentMode: "MPESA",
     createdAt: "2026-03-24T19:05:00.000Z"
   }
 ];
@@ -118,11 +109,11 @@ async function ensureUser(pool, config, user) {
   const passwordHash = await bcrypt.hash(user.password, config.bcryptRounds);
   const result = await pool.query(
     `
-      INSERT INTO users (id, name, email, password_hash, role, payment_mode)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO users (id, name, email, password_hash, role)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `,
-    [user.id, user.name, user.email.toLowerCase(), passwordHash, user.role, user.paymentMode]
+    [user.id, user.name, user.email.toLowerCase(), passwordHash, user.role]
   );
 
   return result.rows[0];
@@ -156,11 +147,10 @@ async function ensureReport(pool, report, userMap) {
         reviewed_by,
         reviewed_by_name,
         reviewed_at,
-        payment_mode,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
     `,
     [
       report.id,
@@ -176,7 +166,6 @@ async function ensureReport(pool, report, userMap) {
       reviewer ? reviewer.id : null,
       reviewer ? reviewer.name : null,
       report.reviewedAt ? new Date(report.reviewedAt) : null,
-      report.paymentMode,
       report.createdAt ? new Date(report.createdAt) : new Date(),
       report.createdAt ? new Date(report.createdAt) : new Date()
     ]
