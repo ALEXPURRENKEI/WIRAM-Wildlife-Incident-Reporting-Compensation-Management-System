@@ -1,8 +1,10 @@
 package com.wiram.backend.dto;
 
 import com.wiram.backend.entity.PaymentMode;
+import jakarta.validation.constraints.NotNull;
 
 public class UpdatePaymentModeRequest {
+  @NotNull
   private PaymentMode paymentMode;
 
   public UpdatePaymentModeRequest() {}

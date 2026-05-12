@@ -26,6 +26,7 @@
       email: email,
       password: password,
       role: "member",
+      paymentMode: "MPESA",
       createdAt: new Date().toISOString()
     };
     users.push(createdUser);
@@ -87,6 +88,7 @@
             name: created.name,
             email: created.email,
             role: created.role,
+            paymentMode: created.paymentMode,
             token: "",
             expiresAt: null
           }
@@ -134,6 +136,7 @@
       name: found.name,
       email: found.email,
       role: found.role,
+      paymentMode: found.paymentMode || "",
       token: "",
       expiresAt: null
     };

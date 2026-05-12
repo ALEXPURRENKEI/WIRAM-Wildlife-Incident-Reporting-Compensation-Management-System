@@ -69,6 +69,25 @@
               <p><a class="btn btn-primary" href="report.html">Report New Incident</a></p>
               <p><a class="btn btn-secondary" href="claim-status.html">Track Claim Progress</a></p>
             </article>
+
+            <article class="card">
+              <h2>Payment Preference</h2>
+              <p class="muted">Choose how you prefer to receive approved compensation.</p>
+              <p class="muted payment-current">Current: <strong class="js-payment-mode">-</strong></p>
+              <form id="paymentModeForm" novalidate>
+                <div class="form-group">
+                  <label for="paymentMode">Mode of Payment</label>
+                  <select id="paymentMode" name="paymentMode" required>
+                    <option value="">Select payment mode</option>
+                    <option value="MPESA">M-Pesa</option>
+                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                    <option value="CASH">Cash</option>
+                    <option value="CHEQUE">Cheque</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary payment-save-btn" type="submit">Save Preference</button>
+              </form>
+            </article>
           </section>
 
           <section class="card" style="margin-top: 1rem;">
@@ -82,6 +101,7 @@
                     <th>Incident</th>
                     <th>Location</th>
                     <th>Loss</th>
+                    <th>Payment</th>
                     <th>Status</th>
                     <th>Date</th>
                     <th>Action</th>

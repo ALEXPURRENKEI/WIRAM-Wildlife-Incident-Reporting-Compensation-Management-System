@@ -65,6 +65,7 @@
       name: user.name || "",
       email: user.email || "",
       role: normalizeRole(user.role),
+      paymentMode: normalizePaymentMode(user.paymentMode),
       token: user.token || "",
       expiresAt: user.expiresAt || null
     };
@@ -131,6 +132,21 @@
     return String(value || "").trim().toLowerCase();
   }
 
+  function normalizePaymentMode(value) {
+    return String(value || "").trim().toUpperCase();
+  }
+
+  function formatPaymentMode(value) {
+    const labels = {
+      MPESA: "M-Pesa",
+      BANK_TRANSFER: "Bank Transfer",
+      CASH: "Cash",
+      CHEQUE: "Cheque"
+    };
+    const normalized = normalizePaymentMode(value);
+    return labels[normalized] || normalized || "-";
+  }
+
   function getApiBaseUrl() {
     const candidates = [
       window.WIRAM_API_BASE_URL,
@@ -168,6 +184,7 @@
       name: user.name || "",
       email: user.email || "",
       role: normalizeRole(user.role),
+      paymentMode: normalizePaymentMode(user.paymentMode),
       token: token || user.token || "",
       expiresAt: expiresAt || user.expiresAt || null
     };
@@ -183,6 +200,7 @@
       name: user.name,
       email: user.email,
       role: normalizeRole(user.role),
+      paymentMode: normalizePaymentMode(user.paymentMode),
       createdAt: user.createdAt || null,
       updatedAt: user.updatedAt || null
     };
@@ -207,6 +225,7 @@
       reporterId: report.reporterId || report.reporter?.id || report.reporter?.uuid || "",
       reporterName: report.reporterName || report.reporter?.name || "",
       reporterEmail: report.reporterEmail || report.reporter?.email || "",
+      paymentMode: normalizePaymentMode(report.paymentMode),
       reviewedBy: report.reviewedBy || "",
       reviewedByName: report.reviewedByName || "",
       reviewedAt: report.reviewedAt || null,
@@ -254,11 +273,21 @@
       headers.set("Content-Type", "application/json");
     }
 
-    const response = await fetch(getApiBaseUrl() + path, {
-      method: requestOptions.method || "GET",
-      headers: headers,
-      body: body
-    });
+    let response;
+    try {
+      response = await fetch(getApiBaseUrl() + path, {
+        method: requestOptions.method || "GET",
+        headers: headers,
+        body: body
+      });
+    } catch (error) {
+      const networkError = new Error(
+        "Unable to reach the WIRAM API. Check that the backend is running, or use the local demo accounts."
+      );
+      networkError.cause = error;
+      networkError.isNetworkError = true;
+      throw networkError;
+    }
 
     const payload = await parseApiResponse(response);
     if (!response.ok) {
@@ -414,6 +443,19 @@
     return normalizeReportRecord(response);
   }
 
+  async function updateRemoteReportPaymentMode(reportId, paymentMode) {
+    const response = await apiRequest(
+      "/api/reports/" + encodeURIComponent(reportId) + "/payment-mode",
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          paymentMode: normalizePaymentMode(paymentMode)
+        })
+      }
+    );
+    return normalizeReportRecord(response);
+  }
+
   async function updateRemoteUserRole(userId, role) {
     const response = await apiRequest("/api/users/" + encodeURIComponent(userId) + "/role", {
       method: "PATCH",
@@ -422,6 +464,16 @@
       })
     });
     return normalizeUserRecord(response);
+  }
+
+  async function updateRemotePaymentMode(paymentMode) {
+    const response = await apiRequest("/api/users/me/payment-mode", {
+      method: "PATCH",
+      body: JSON.stringify({
+        paymentMode: normalizePaymentMode(paymentMode)
+      })
+    });
+    return normalizePaymentMode(response.paymentMode);
   }
 
   async function loginRemoteUser(payload) {
@@ -734,6 +786,10 @@
       document.querySelectorAll(".js-user-role").forEach(function (node) {
         node.textContent = user.role;
       });
+
+      document.querySelectorAll(".js-payment-mode").forEach(function (node) {
+        node.textContent = formatPaymentMode(user.paymentMode);
+      });
     }
 
     document.querySelectorAll(".js-current-year").forEach(function (node) {
@@ -801,6 +857,85 @@
         }
       });
     });
+  }
+
+  function setLocalPaymentMode(paymentMode) {
+    const normalized = normalizePaymentMode(paymentMode);
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      return null;
+    }
+
+    const updatedUser = {
+      id: currentUser.id,
+      name: currentUser.name,
+      email: currentUser.email,
+      role: currentUser.role,
+      paymentMode: normalized,
+      token: currentUser.token,
+      expiresAt: currentUser.expiresAt
+    };
+    setCurrentUser(updatedUser);
+
+    const users = getUsers().map(function (user) {
+      if (user.id !== currentUser.id) {
+        return user;
+      }
+      return Object.assign({}, user, { paymentMode: normalized });
+    });
+    setUsers(users);
+
+    return updatedUser;
+  }
+
+  async function savePaymentMode(paymentMode) {
+    const normalized = normalizePaymentMode(paymentMode);
+    if (!normalized) {
+      throw new Error("Please select a payment mode.");
+    }
+
+    if (isApiConfigured()) {
+      const savedMode = await updateRemotePaymentMode(normalized);
+      return setLocalPaymentMode(savedMode);
+    }
+
+    return setLocalPaymentMode(normalized);
+  }
+
+  function initPaymentModeForm() {
+    const form = document.getElementById("paymentModeForm");
+    const select = document.getElementById("paymentMode");
+    if (!form || !select || form.dataset.bound) {
+      return;
+    }
+
+    const currentUser = getCurrentUser();
+    if (currentUser && currentUser.paymentMode) {
+      select.value = normalizePaymentMode(currentUser.paymentMode);
+    }
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      showSpinner();
+      savePaymentMode(select.value)
+        .then(function (updatedUser) {
+          if (updatedUser) {
+            select.value = normalizePaymentMode(updatedUser.paymentMode);
+            document.querySelectorAll(".js-payment-mode").forEach(function (node) {
+              node.textContent = formatPaymentMode(updatedUser.paymentMode);
+            });
+          }
+          showAlert("Payment preference saved.", "success");
+        })
+        .catch(function (error) {
+          showAlert(error.message || "Unable to save payment preference.", "error");
+        })
+        .finally(function () {
+          hideSpinner();
+        });
+    });
+
+    form.dataset.bound = "true";
   }
 
   // Admin user table rendering and role updates.
@@ -937,6 +1072,7 @@
                   name: currentUser.name,
                   email: currentUser.email,
                   role: updatedUser.role,
+                  paymentMode: currentUser.paymentMode,
                   token: currentUser.token,
                   expiresAt: currentUser.expiresAt
                 });
@@ -1107,6 +1243,7 @@
           email: "member@wiram.org",
           password: "password123",
           role: "member",
+          paymentMode: "MPESA",
           createdAt: "2026-02-06T09:00:00.000Z"
         },
         {
@@ -1115,6 +1252,7 @@
           email: "community@wiram.org",
           password: "password123",
           role: "member",
+          paymentMode: "MPESA",
           createdAt: "2026-02-11T09:00:00.000Z"
         },
         {
@@ -1123,6 +1261,7 @@
           email: "officer@wiram.org",
           password: "password123",
           role: "officer",
+          paymentMode: "BANK_TRANSFER",
           createdAt: "2026-01-28T09:00:00.000Z"
         },
         {
@@ -1131,6 +1270,7 @@
           email: "admin@wiram.org",
           password: "password123",
           role: "admin",
+          paymentMode: "BANK_TRANSFER",
           createdAt: "2026-01-20T09:00:00.000Z"
         }
       ]);
@@ -1235,6 +1375,8 @@
     escapeHtml: escapeHtml,
     normalizeRole: normalizeRole,
     normalizeStatus: normalizeStatus,
+    normalizePaymentMode: normalizePaymentMode,
+    formatPaymentMode: formatPaymentMode,
     getApiBaseUrl: getApiBaseUrl,
     isApiConfigured: isApiConfigured,
     apiRequest: apiRequest,
@@ -1245,11 +1387,15 @@
     loadReportDetail: loadReportDetail,
     submitRemoteReport: submitRemoteReport,
     updateRemoteReportStatus: updateRemoteReportStatus,
+    updateRemoteReportPaymentMode: updateRemoteReportPaymentMode,
     updateRemoteUserRole: updateRemoteUserRole,
+    updateRemotePaymentMode: updateRemotePaymentMode,
+    savePaymentMode: savePaymentMode,
     loginRemoteUser: loginRemoteUser,
     registerRemoteUser: registerRemoteUser,
     logoutRemoteUser: logoutRemoteUser,
     verifyCurrentSession: verifyCurrentSession,
+    seedMockData: seedMockData,
     showAlert: showAlert,
     showSpinner: showSpinner,
     hideSpinner: hideSpinner,
@@ -1262,14 +1408,14 @@
   };
 
   document.addEventListener("DOMContentLoaded", async function () {
+    seedMockData();
+
     if (isApiConfigured()) {
       try {
         await verifyCurrentSession();
       } catch (_error) {
         clearCurrentUser();
       }
-    } else {
-      seedMockData();
     }
 
     ensureUiContainers();
@@ -1283,5 +1429,6 @@
 
     await refreshDashboardViews();
     await initManageUsersPage();
+    initPaymentModeForm();
   });
 })();

@@ -651,6 +651,14 @@ th {
   margin-bottom: 0.3rem;
 }
 
+.payment-current {
+  margin-bottom: 0.65rem;
+}
+
+.payment-save-btn {
+  margin-top: 0.8rem;
+}
+
 .modal {
   position: fixed;
   inset: 0;

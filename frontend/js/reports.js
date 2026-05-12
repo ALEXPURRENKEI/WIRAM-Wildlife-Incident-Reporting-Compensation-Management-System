@@ -155,7 +155,7 @@
     }
 
     if (!reports.length) {
-      const columns = includeReporter ? 9 : 8;
+      const columns = includeReporter ? 10 : 9;
       tableBody.innerHTML =
         '<tr><td colspan="' +
         columns +
@@ -185,6 +185,9 @@
           "</td>" +
           "<td>" +
           window.WIRAM.formatCurrency(report.estimatedLoss) +
+          "</td>" +
+          "<td>" +
+          window.WIRAM.escapeHtml(window.WIRAM.formatPaymentMode(report.paymentMode)) +
           "</td>" +
           "<td>" +
           statusBadge(report.status) +
@@ -250,6 +253,63 @@
     }
   }
 
+  async function updatePaymentMode(reportId, paymentMode) {
+    const normalized = window.WIRAM.normalizePaymentMode(paymentMode);
+    if (!normalized) {
+      window.WIRAM.showAlert("Please select a payment mode.", "error");
+      return false;
+    }
+
+    const localReports = window.WIRAM.getReports();
+    const localReport = localReports.find(function (item) {
+      return item.id === reportId;
+    });
+
+    if (!localReport && !window.WIRAM.isApiConfigured()) {
+      window.WIRAM.showAlert("Report was not found.", "error");
+      return false;
+    }
+
+    window.WIRAM.showSpinner();
+    try {
+      if (window.WIRAM.isApiConfigured()) {
+        await window.WIRAM.updateRemoteReportPaymentMode(reportId, normalized);
+      } else if (localReport) {
+        localReport.paymentMode = normalized;
+        localReport.updatedAt = new Date().toISOString();
+        window.WIRAM.setReports(localReports);
+      }
+
+      window.WIRAM.showAlert("Payment mode updated.", "success");
+      await refreshReportViews();
+      return true;
+    } catch (error) {
+      window.WIRAM.showAlert(error.message || "Unable to update payment mode.", "error");
+      return false;
+    } finally {
+      window.WIRAM.hideSpinner();
+    }
+  }
+
+  function bindModalPaymentModeForm(report) {
+    const form = document.getElementById("modalPaymentModeForm");
+    const select = document.getElementById("modalPaymentMode");
+    if (!form || !select || form.dataset.bound) {
+      return;
+    }
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      updatePaymentMode(report.id, select.value).then(function (updated) {
+        if (updated) {
+          void openReportModal(report.id);
+        }
+      });
+    });
+
+    form.dataset.bound = "true";
+  }
+
   async function openReportModal(reportId) {
     let report = null;
     try {
@@ -286,6 +346,32 @@
         : "<p class='muted'>No image preview available.</p>";
 
     const history = Array.isArray(report.history) ? report.history : [];
+    const currentUser = window.WIRAM.getCurrentUser();
+    const canEditPaymentMode =
+      currentUser &&
+      window.WIRAM.normalizeRole(currentUser.role) === "member" &&
+      (!report.reporterId || report.reporterId === currentUser.id) &&
+      normalizeStatus(report.status) !== "paid";
+    const paymentModeControl = canEditPaymentMode
+      ? '<form id="modalPaymentModeForm" class="inline-form" style="margin-top: 0.75rem;" novalidate>' +
+        '<select id="modalPaymentMode" name="paymentMode" required>' +
+        '<option value="">Select payment mode</option>' +
+        '<option value="MPESA"' +
+        (window.WIRAM.normalizePaymentMode(report.paymentMode) === "MPESA" ? " selected" : "") +
+        ">M-Pesa</option>" +
+        '<option value="BANK_TRANSFER"' +
+        (window.WIRAM.normalizePaymentMode(report.paymentMode) === "BANK_TRANSFER" ? " selected" : "") +
+        ">Bank Transfer</option>" +
+        '<option value="CASH"' +
+        (window.WIRAM.normalizePaymentMode(report.paymentMode) === "CASH" ? " selected" : "") +
+        ">Cash</option>" +
+        '<option value="CHEQUE"' +
+        (window.WIRAM.normalizePaymentMode(report.paymentMode) === "CHEQUE" ? " selected" : "") +
+        ">Cheque</option>" +
+        "</select>" +
+        '<button class="btn btn-primary btn-sm" type="submit">Save</button>' +
+        "</form>"
+      : "";
     const historyMarkup =
       history.length > 0
         ? '<div class="history-list">' +
@@ -334,6 +420,10 @@
       '<div class="detail-item"><strong>Status</strong>' +
       statusBadge(report.status) +
       "</div>" +
+      '<div class="detail-item"><strong>Payment Mode</strong>' +
+      window.WIRAM.escapeHtml(window.WIRAM.formatPaymentMode(report.paymentMode)) +
+      paymentModeControl +
+      "</div>" +
       '<div class="detail-item"><strong>Submitted</strong>' +
       window.WIRAM.formatDate(report.createdAt) +
       "</div>" +
@@ -357,6 +447,7 @@
       "</div>" +
       "</div>";
 
+    bindModalPaymentModeForm(report);
     window.WIRAM.openModal("reportModal");
   }
 
@@ -444,9 +535,10 @@
     const location = String(data.get("location") || "").trim();
     const description = String(data.get("description") || "").trim();
     const estimatedLoss = Number(data.get("estimatedLoss") || 0);
+    const paymentMode = window.WIRAM.normalizePaymentMode(data.get("paymentMode"));
     const imageFile = data.get("reportImage");
 
-    if (!animalType || !incidentType || !location || !description) {
+    if (!animalType || !incidentType || !location || !description || !paymentMode) {
       window.WIRAM.showAlert("Please complete all required incident fields.", "error");
       return false;
     }
@@ -480,6 +572,7 @@
           location: location,
           description: description,
           estimatedLoss: estimatedLoss,
+          paymentMode: paymentMode,
           evidenceName: evidenceName,
           evidenceData: evidenceData
         });
@@ -495,6 +588,7 @@
           estimatedLoss: estimatedLoss,
           evidenceName: evidenceName,
           evidenceData: evidenceData,
+          paymentMode: paymentMode,
           status: "pending",
           reporterId: currentUser.id,
           reporterName: currentUser.name,
@@ -701,6 +795,12 @@
       return;
     }
 
+    const paymentSelect = document.getElementById("paymentMode");
+    const currentUser = window.WIRAM.getCurrentUser();
+    if (paymentSelect && currentUser && currentUser.paymentMode) {
+      paymentSelect.value = window.WIRAM.normalizePaymentMode(currentUser.paymentMode);
+    }
+
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       void submitReport();
@@ -713,6 +813,7 @@
   window.displayReports = displayReports;
   window.filterReports = filterReports;
   window.updateStatus = updateStatus;
+  window.updatePaymentMode = updatePaymentMode;
 
   document.addEventListener("DOMContentLoaded", function () {
     bindReportForm();

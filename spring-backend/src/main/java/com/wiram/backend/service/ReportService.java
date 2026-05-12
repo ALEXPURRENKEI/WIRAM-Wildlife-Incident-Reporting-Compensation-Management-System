@@ -58,6 +58,7 @@ public class ReportService {
     report.setEvidenceName(normalizeText(request.evidenceName()));
     report.setEvidenceData(normalizeText(request.evidenceData()));
     report.setStatus(ReportStatus.PENDING);
+    report.setPaymentMode(request.paymentMode());
     report.setReviewedBy(null);
     report.setReviewedByName(null);
     report.setReviewedAt(null);
