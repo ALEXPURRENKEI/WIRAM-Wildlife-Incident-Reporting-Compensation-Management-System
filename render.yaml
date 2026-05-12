@@ -17,7 +17,8 @@ services:
         value: "https://wiram-frontend.onrender.com"
       - key: SEED_DEMO_DATA
         value: "false"
-  - type: static
+  - type: web
     name: wiram-frontend
+    runtime: static
     rootDir: frontend
     staticPublishPath: .
