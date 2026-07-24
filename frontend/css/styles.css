@@ -396,6 +396,12 @@ textarea {
   background: #fbfdf8;
 }
 
+.location-hint {
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 textarea {
   min-height: 110px;
   resize: vertical;
@@ -488,6 +494,124 @@ textarea:focus {
   justify-content: flex-end;
   color: #2c4738;
   font-size: 0.95rem;
+}
+
+.user-profile-control {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.user-avatar-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 999px;
+  border: 2px solid rgba(23, 74, 50, 0.16);
+  background: linear-gradient(135deg, #f8f5ea, #e6f2e9);
+  overflow: hidden;
+  color: #174a32;
+  font-weight: 700;
+}
+
+.user-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.user-avatar-camera {
+  position: absolute;
+  right: -0.1rem;
+  bottom: -0.1rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 999px;
+  background: #174a32;
+  color: #fff;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.profile-picture-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.profile-picture-modal.active {
+  display: flex;
+}
+
+.profile-picture-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 24, 16, 0.72);
+}
+
+.profile-picture-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(90vw, 28rem);
+  max-height: 90vh;
+  padding: 1rem;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.22);
+}
+
+.profile-picture-modal-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  border: 0;
+  background: rgba(23, 74, 50, 0.12);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  color: #174a32;
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+
+.profile-picture-modal-image {
+  display: block;
+  width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 12px;
 }
 
 .content {

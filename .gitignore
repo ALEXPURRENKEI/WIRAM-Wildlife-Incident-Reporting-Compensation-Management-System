@@ -13,3 +13,5 @@ spring-backend/.env
 Thumbs.db
 Desktop.ini
 .DS_Store
+spring-backend/data/
+

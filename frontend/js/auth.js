@@ -13,6 +13,10 @@
     return Boolean(window.WIRAM && window.WIRAM.isApiConfigured && window.WIRAM.isApiConfigured());
   }
 
+  function getLocalDataEnabled() {
+    return Boolean(window.WIRAM && window.WIRAM.shouldUseLocalData && window.WIRAM.shouldUseLocalData());
+  }
+
   async function fallbackRegister(name, email, password) {
     const users = window.WIRAM.getUsers();
     if (users.some(function (user) { return String(user.email || "").toLowerCase() === email; })) {
@@ -75,7 +79,7 @@
           email: email,
           password: password
         });
-      } else {
+      } else if (getLocalDataEnabled()) {
         const created = await fallbackRegister(name, email, password);
         if (!created) {
           return false;
@@ -93,22 +97,43 @@
             expiresAt: null
           }
         };
+      } else {
+        throw new Error("Backend is offline. Start the backend to register a real account.");
       }
 
       const sessionUser = authResult.user;
+      if (sessionUser.token) {
+        window.localStorage.removeItem("wiram_local_demo_mode");
+      }
       window.WIRAM.setCurrentUser(sessionUser);
       window.WIRAM.setFlashMessage("Registration successful. Welcome, " + sessionUser.name + ".", "success");
       window.location.href = window.WIRAM.getRoleHome(sessionUser.role);
       return true;
     } catch (error) {
-      if (getApiEnabled()) {
+      const canUseLocalFallback =
+        getLocalDataEnabled() ||
+        (window.WIRAM.isApiNetworkError && window.WIRAM.isApiNetworkError(error));
+
+      if (canUseLocalFallback) {
         try {
           const created = await fallbackRegister(name, email, password);
           if (created) {
-            window.WIRAM.setFlashMessage("Registration successful. Please log in.", "success");
-            window.location.href = "login.html";
+            const sessionUser = {
+              id: created.id,
+              name: created.name,
+              email: created.email,
+              role: created.role,
+              paymentMode: created.paymentMode,
+              token: "",
+              expiresAt: null
+            };
+            window.localStorage.setItem("wiram_local_demo_mode", "true");
+            window.WIRAM.setCurrentUser(sessionUser);
+            window.WIRAM.setFlashMessage("Registration successful. Welcome, " + sessionUser.name + ".", "success");
+            window.location.href = window.WIRAM.getRoleHome(sessionUser.role);
             return true;
           }
+          return false;
         } catch (_fallbackError) {
           // Fall through to the error below.
         }
@@ -161,7 +186,6 @@
       window.WIRAM.showAlert("Password is required.", "error");
       return false;
     }
-
     window.WIRAM.showSpinner();
     try {
       let sessionUser = null;
@@ -169,8 +193,10 @@
       if (getApiEnabled()) {
         const authResult = await window.WIRAM.loginRemoteUser({ email: email, password: password });
         sessionUser = authResult.user;
-      } else {
+      } else if (getLocalDataEnabled()) {
         sessionUser = await fallbackLogin(email, password);
+      } else {
+        throw new Error("Backend is offline. Start the backend to log in with database accounts.");
       }
 
       if (!sessionUser) {
@@ -178,17 +204,32 @@
         return false;
       }
 
+      if (sessionUser.token) {
+        window.localStorage.removeItem("wiram_local_demo_mode");
+      }
       window.WIRAM.setCurrentUser(sessionUser);
       window.WIRAM.setFlashMessage("Welcome back, " + sessionUser.name + ".", "success");
       window.location.href = window.WIRAM.getRoleHome(sessionUser.role);
       return true;
     } catch (error) {
+      if (window.WIRAM && window.WIRAM.seedMockData) {
+        window.WIRAM.seedMockData();
+      }
       const fallbackUser = await fallbackLogin(email, password);
       if (fallbackUser) {
         window.WIRAM.setCurrentUser(fallbackUser);
+        window.localStorage.setItem("wiram_local_demo_mode", "true");
         window.WIRAM.setFlashMessage("Welcome back, " + fallbackUser.name + ".", "success");
         window.location.href = window.WIRAM.getRoleHome(fallbackUser.role);
         return true;
+      }
+
+      if (window.WIRAM.isApiNetworkError && window.WIRAM.isApiNetworkError(error)) {
+        window.WIRAM.showAlert(
+          "Backend is offline. You can log in using demo accounts (e.g. member@wiram.org / password123).",
+          "error"
+        );
+        return false;
       }
 
       window.WIRAM.showAlert(error.message || "Invalid email or password.", "error");

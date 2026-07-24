@@ -3,6 +3,10 @@ package com.wiram.backend.config;
 import com.wiram.backend.config.DatabaseUrlNormalizer.DatabaseConnection;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +29,7 @@ public class DatabaseConfig {
         firstNonBlank(databaseUrl, springDatasourceUrl);
 
     if (resolvedUrl == null || resolvedUrl.isBlank()) {
-      logger.warn("DATABASE_URL is not set. Falling back to in-memory H2 so the service can boot.");
+      logger.warn("DATABASE_URL is not set. Falling back to local file-based H2 so the service can boot.");
       return fallbackDataSource();
     }
 
@@ -50,7 +54,7 @@ public class DatabaseConfig {
       return new HikariDataSource(config);
     } catch (RuntimeException ex) {
       logger.warn(
-          "PostgreSQL datasource could not start. Falling back to in-memory H2 so the service stays up.",
+          "PostgreSQL datasource could not start. Falling back to local file-based H2 so the service stays up.",
           ex);
       return fallbackDataSource();
     }
@@ -70,8 +74,8 @@ public class DatabaseConfig {
 
   private DataSource fallbackDataSource() {
     HikariConfig config = new HikariConfig();
-    config.setJdbcUrl(
-        "jdbc:h2:mem:wiram;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
+    String jdbcUrl = buildPersistentFallbackJdbcUrl();
+    config.setJdbcUrl(jdbcUrl);
     config.setUsername("sa");
     config.setPassword("");
     config.setMaximumPoolSize(5);
@@ -79,4 +83,17 @@ public class DatabaseConfig {
     config.setPoolName("wiram-h2-pool");
     return new HikariDataSource(config);
   }
+
+  private String buildPersistentFallbackJdbcUrl() {
+    try {
+      Path dataDir = Paths.get("data");
+      Files.createDirectories(dataDir);
+      String dbPath = dataDir.resolve("wiram").toAbsolutePath().toString().replace('\\', '/');
+      return "jdbc:h2:file:" + dbPath + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE";
+    } catch (IOException ex) {
+      logger.warn("Unable to create the local H2 data directory; falling back to an in-memory database.", ex);
+      return "jdbc:h2:mem:wiram;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE";
+    }
+  }
 }
+

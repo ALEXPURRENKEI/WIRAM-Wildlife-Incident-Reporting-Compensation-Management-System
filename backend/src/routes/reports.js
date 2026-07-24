@@ -136,6 +136,7 @@ function createReportsRoutes({ pool, config }) {
       const location = String(req.body.location || "").trim();
       const description = String(req.body.description || "").trim();
       const estimatedLoss = Number(req.body.estimatedLoss || 0);
+      const paymentMode = String(req.body.paymentMode || "MPESA").trim().toUpperCase();
       const evidenceName = String(req.body.evidenceName || "").trim() || null;
       const evidenceData = String(req.body.evidenceData || "").trim() || null;
 
@@ -158,9 +159,10 @@ function createReportsRoutes({ pool, config }) {
             estimated_loss,
             evidence_name,
             evidence_data,
+            payment_mode,
             status
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
           RETURNING *
         `,
         [
@@ -171,7 +173,8 @@ function createReportsRoutes({ pool, config }) {
           description,
           estimatedLoss,
           evidenceName,
-          evidenceData
+          evidenceData,
+          paymentMode
         ]
       );
 
@@ -282,6 +285,58 @@ function createReportsRoutes({ pool, config }) {
         message: "Report status updated successfully.",
         report: serializeReport(fullReport.rows[0]),
         status: updated.rows[0].status
+      });
+    })
+  );
+
+  router.patch(
+    "/:id/payment-mode",
+    authenticate,
+    requireRole("officer", "admin"),
+    asyncHandler(async function (req, res) {
+      const paymentMode = String(req.body.paymentMode || "").trim().toUpperCase();
+      const validPaymentModes = ["MPESA", "BANK_TRANSFER", "CASH", "CHEQUE"];
+
+      if (!paymentMode || validPaymentModes.indexOf(paymentMode) === -1) {
+        throw new HttpError(400, "Invalid payment mode value.");
+      }
+
+      const reportResult = await pool.query("SELECT * FROM reports WHERE id = $1", [
+        req.params.id
+      ]);
+
+      const report = reportResult.rows[0];
+      if (!report) {
+        throw new HttpError(404, "Report not found.");
+      }
+
+      const updated = await pool.query(
+        `
+          UPDATE reports
+          SET payment_mode = $2
+          WHERE id = $1
+          RETURNING *
+        `,
+        [req.params.id, paymentMode]
+      );
+
+      const fullReport = await pool.query(
+        `
+          SELECT
+            r.*,
+            reporter.name AS reporter_name,
+            reviewer.name AS reviewed_by_name
+          FROM reports r
+          LEFT JOIN users reporter ON reporter.id = r.reporter_id
+          LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
+          WHERE r.id = $1
+        `,
+        [req.params.id]
+      );
+
+      res.json({
+        message: "Payment mode updated successfully.",
+        report: serializeReport(fullReport.rows[0])
       });
     })
   );

@@ -5,7 +5,6 @@
   const COMPRESSED_IMAGE_TYPE = "image/jpeg";
   const COMPRESSED_IMAGE_QUALITY = 0.82;
   const MAX_LOCAL_EVIDENCE_LENGTH = 350000;
-
   function readAsDataUrl(file) {
     return new Promise(function (resolve, reject) {
       const reader = new FileReader();
@@ -59,7 +58,7 @@
 
     context.drawImage(image, 0, 0, width, height);
 
-    const compressed = canvas.toDataURL(COMPRESSED_IMAGE_TYPE, COMPRESSED_IMAGE_QUALITY);
+      const compressed = canvas.toDataURL(COMPRESSED_IMAGE_TYPE, COMPRESSED_IMAGE_QUALITY);
     const original = await readAsDataUrl(file);
     return compressed.length < original.length ? compressed : original;
   }
@@ -74,6 +73,21 @@
       error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
       /quota/i.test(String(error.message || ""))
     );
+  }
+
+  function saveLocalReport(report, reports) {
+    try {
+      window.WIRAM.setReports(reports);
+      return false;
+    } catch (storageError) {
+      if (!report.evidenceData || !isStorageQuotaError(storageError)) {
+        throw storageError;
+      }
+
+      report.evidenceData = "";
+      window.WIRAM.setReports(reports);
+      return true;
+    }
   }
 
   function normalizeStatus(status) {
@@ -219,7 +233,7 @@
       return item.id === reportId;
     });
 
-    if (!localReport && !window.WIRAM.isApiConfigured()) {
+    if (!localReport && window.WIRAM.shouldUseLocalData && window.WIRAM.shouldUseLocalData()) {
       window.WIRAM.showAlert("Report was not found.", "error");
       return false;
     }
@@ -227,8 +241,19 @@
     window.WIRAM.showSpinner();
     try {
       if (window.WIRAM.isApiConfigured()) {
-        await window.WIRAM.updateRemoteReportStatus(reportId, normalized, "");
-      } else if (localReport) {
+        try {
+          await window.WIRAM.updateRemoteReportStatus(reportId, normalized, "");
+        } catch (error) {
+          if (!window.WIRAM.isApiNetworkError || !window.WIRAM.isApiNetworkError(error) || !localReport || !window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData()) {
+            throw error;
+          }
+        }
+      }
+      if (!window.WIRAM.isApiConfigured() && (!window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData())) {
+        throw new Error("Backend is offline. Start the backend before updating reports.");
+      }
+
+      if (window.WIRAM.shouldUseLocalData && window.WIRAM.shouldUseLocalData() && localReport) {
         localReport.status = normalized;
         localReport.updatedAt = new Date().toISOString();
         const currentUser = window.WIRAM.getCurrentUser();
@@ -265,7 +290,7 @@
       return item.id === reportId;
     });
 
-    if (!localReport && !window.WIRAM.isApiConfigured()) {
+    if (!localReport && window.WIRAM.shouldUseLocalData && window.WIRAM.shouldUseLocalData()) {
       window.WIRAM.showAlert("Report was not found.", "error");
       return false;
     }
@@ -273,8 +298,19 @@
     window.WIRAM.showSpinner();
     try {
       if (window.WIRAM.isApiConfigured()) {
-        await window.WIRAM.updateRemoteReportPaymentMode(reportId, normalized);
-      } else if (localReport) {
+        try {
+          await window.WIRAM.updateRemoteReportPaymentMode(reportId, normalized);
+        } catch (error) {
+          if (!window.WIRAM.isApiNetworkError || !window.WIRAM.isApiNetworkError(error) || !localReport || !window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData()) {
+            throw error;
+          }
+        }
+      }
+      if (!window.WIRAM.isApiConfigured() && (!window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData())) {
+        throw new Error("Backend is offline. Start the backend before updating payment mode.");
+      }
+
+      if (window.WIRAM.shouldUseLocalData && window.WIRAM.shouldUseLocalData() && localReport) {
         localReport.paymentMode = normalized;
         localReport.updatedAt = new Date().toISOString();
         window.WIRAM.setReports(localReports);
@@ -560,26 +596,40 @@
         evidenceData = await buildEvidenceData(imageFile);
       }
 
-      if (!window.WIRAM.isApiConfigured() && evidenceData.length > MAX_LOCAL_EVIDENCE_LENGTH) {
+      if (window.WIRAM.shouldUseLocalData && window.WIRAM.shouldUseLocalData() && evidenceData.length > MAX_LOCAL_EVIDENCE_LENGTH) {
         evidenceData = "";
         localImageSkipped = true;
       }
 
+      let savedRemotely = false;
       if (window.WIRAM.isApiConfigured()) {
-        await window.WIRAM.submitRemoteReport({
-          animalType: animalType,
-          incidentType: incidentType,
-          location: location,
-          description: description,
-          estimatedLoss: estimatedLoss,
-          paymentMode: paymentMode,
-          evidenceName: evidenceName,
-          evidenceData: evidenceData
-        });
-      } else {
+        try {
+          await window.WIRAM.submitRemoteReport({
+            animalType: animalType,
+            incidentType: incidentType,
+            location: location,
+            description: description,
+            estimatedLoss: estimatedLoss,
+            paymentMode: paymentMode,
+            evidenceName: evidenceName,
+            evidenceData: evidenceData
+          });
+          savedRemotely = true;
+          window.localStorage.removeItem("wiram_local_demo_mode");
+        } catch (error) {
+          if (!window.WIRAM.isApiNetworkError || !window.WIRAM.isApiNetworkError(error) || !window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData()) {
+            throw error;
+          }
+        }
+      }
+      if (!window.WIRAM.isApiConfigured() && (!window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData())) {
+        throw new Error("Backend is offline. Start the backend before submitting reports.");
+      }
+
+      if (!savedRemotely && window.WIRAM.shouldUseLocalData && window.WIRAM.shouldUseLocalData()) {
         const reports = window.WIRAM.getReports();
         const now = new Date().toISOString();
-        reports.unshift({
+        const report = {
           id: window.WIRAM.createId("RPT"),
           animalType: animalType,
           incidentType: incidentType,
@@ -594,18 +644,9 @@
           reporterName: currentUser.name,
           createdAt: now,
           updatedAt: now
-        });
-        try {
-          window.WIRAM.setReports(reports);
-        } catch (storageError) {
-          if (!evidenceData || !isStorageQuotaError(storageError)) {
-            throw storageError;
-          }
-
-          reports[0].evidenceData = "";
-          localImageSkipped = true;
-          window.WIRAM.setReports(reports);
-        }
+        };
+        reports.unshift(report);
+        localImageSkipped = saveLocalReport(report, reports) || localImageSkipped;
       }
 
       if (localImageSkipped) {
@@ -821,3 +862,4 @@
     void refreshReportViews();
   });
 })();
+

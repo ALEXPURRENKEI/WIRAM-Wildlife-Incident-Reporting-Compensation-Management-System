@@ -11,6 +11,8 @@
       isLocalFrontend ? "http://localhost:8080" : "https://wiram-spring-backend.onrender.com";
   }
 
+  let apiUnavailable = false;
+
   // Centralized localStorage keys used across the whole application.
   const STORAGE_KEYS = {
     users: "wiram_users",
@@ -66,6 +68,7 @@
       email: user.email || "",
       role: normalizeRole(user.role),
       paymentMode: normalizePaymentMode(user.paymentMode),
+      profilePicture: user.profilePicture || user.avatar || user.photo || "",
       token: user.token || "",
       expiresAt: user.expiresAt || null
     };
@@ -147,6 +150,214 @@
     return labels[normalized] || normalized || "-";
   }
 
+  function getUserProfilePicture(user) {
+    return user && (user.profilePicture || user.avatar || user.photo || "");
+  }
+
+  function getInitials(value) {
+    const name = String(value || "").trim();
+    if (!name) {
+      return "U";
+    }
+
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function ensureProfilePicturePreviewModal() {
+    if (document.getElementById("profilePictureModal")) {
+      return;
+    }
+
+    const modal = document.createElement("div");
+    modal.id = "profilePictureModal";
+    modal.className = "profile-picture-modal";
+    modal.setAttribute("aria-hidden", "true");
+    modal.innerHTML = [
+      '<div class="profile-picture-modal-backdrop"></div>',
+      '<div class="profile-picture-modal-dialog" role="dialog" aria-modal="true" aria-label="Profile picture preview">',
+      '<button class="profile-picture-modal-close" type="button" aria-label="Close profile preview">×</button>',
+      '<img class="profile-picture-modal-image" alt="Profile picture preview" />',
+      '</div>'
+    ].join("");
+    document.body.appendChild(modal);
+
+    const closeButton = modal.querySelector(".profile-picture-modal-close");
+    const backdrop = modal.querySelector(".profile-picture-modal-backdrop");
+    const closePreview = function () {
+      modal.setAttribute("aria-hidden", "true");
+      modal.classList.remove("active");
+    };
+
+    if (closeButton) {
+      closeButton.addEventListener("click", closePreview);
+    }
+    if (backdrop) {
+      backdrop.addEventListener("click", closePreview);
+    }
+    modal.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closePreview();
+      }
+    });
+  }
+
+  function openProfilePicturePreview(source) {
+    ensureProfilePicturePreviewModal();
+    const modal = document.getElementById("profilePictureModal");
+    if (!modal || !source) {
+      return;
+    }
+
+    const image = modal.querySelector(".profile-picture-modal-image");
+    if (image) {
+      image.src = source;
+    }
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+    modal.focus();
+  }
+
+  function renderUserProfileControls(user) {
+    const profileUser = user || getCurrentUser();
+    if (!profileUser) {
+      return;
+    }
+
+    document.querySelectorAll(".topbar-user").forEach(function (container) {
+      let control = container.querySelector(".js-profile-picture-control");
+      if (!control) {
+        const nameNode = container.querySelector(".js-user-name");
+        control = document.createElement("label");
+        control.className = "user-profile-control js-profile-picture-control";
+        control.setAttribute("title", "Upload profile picture");
+        control.innerHTML = [
+          '<span class="user-avatar-btn" role="button" tabindex="0" aria-label="Upload profile picture">',
+          '<img class="user-avatar-img js-user-avatar-image" alt="Profile picture" />',
+          '<span class="user-avatar-fallback js-user-avatar-fallback"></span>',
+          '<span class="user-avatar-camera">+</span>',
+          '</span>',
+          '<input type="file" accept="image/*" class="sr-only js-profile-picture-input" />'
+        ].join("");
+
+        if (nameNode) {
+          container.insertBefore(control, nameNode);
+        } else {
+          container.prepend(control);
+        }
+      }
+
+      const profileInput = control.querySelector(".js-profile-picture-input");
+      if (profileInput && !profileInput.dataset.bound) {
+        profileInput.addEventListener("change", function (event) {
+          const file = event.target.files && event.target.files[0];
+          if (!file) {
+            return;
+          }
+
+          if (!file.type || !file.type.startsWith("image/")) {
+            showAlert("Please choose an image file.", "error");
+            event.target.value = "";
+            return;
+          }
+
+          if (file.size > 2 * 1024 * 1024) {
+            showAlert("Please choose an image smaller than 2MB.", "error");
+            event.target.value = "";
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = function () {
+            const nextPicture = reader.result;
+            const currentUser = getCurrentUser();
+            if (!currentUser) {
+              return;
+            }
+
+            const updatedUser = Object.assign({}, currentUser, {
+              profilePicture: nextPicture
+            });
+            setCurrentUser(updatedUser);
+
+            const users = getUsers().slice();
+            const existingIndex = users.findIndex(function (item) {
+              return item.id === currentUser.id;
+            });
+            if (existingIndex >= 0) {
+              users[existingIndex] = Object.assign({}, users[existingIndex], {
+                profilePicture: nextPicture
+              });
+            } else {
+              users.push(Object.assign({}, updatedUser, { createdAt: new Date().toISOString() }));
+            }
+            setUsers(users);
+            renderUserProfileControls(updatedUser);
+            showAlert("Profile picture updated.", "success");
+          };
+          reader.onerror = function () {
+            showAlert("Unable to read the selected image.", "error");
+          };
+          reader.readAsDataURL(file);
+          event.target.value = "";
+        });
+        profileInput.dataset.bound = "true";
+      }
+
+      const avatarButton = control.querySelector(".user-avatar-btn");
+      if (avatarButton && !avatarButton.dataset.bound) {
+        avatarButton.addEventListener("click", function (event) {
+          const picture = getUserProfilePicture(profileUser);
+          if (!picture) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          openProfilePicturePreview(picture);
+        });
+        avatarButton.addEventListener("keydown", function (event) {
+          const picture = getUserProfilePicture(profileUser);
+          if ((event.key === "Enter" || event.key === " ") && picture) {
+            event.preventDefault();
+            openProfilePicturePreview(picture);
+          }
+        });
+        avatarButton.dataset.bound = "true";
+      }
+
+      const avatarImage = control.querySelector(".js-user-avatar-image");
+      const avatarFallback = control.querySelector(".js-user-avatar-fallback");
+      const picture = getUserProfilePicture(profileUser);
+      if (avatarImage) {
+        if (picture) {
+          avatarImage.src = picture;
+          avatarImage.removeAttribute("hidden");
+        } else {
+          avatarImage.removeAttribute("src");
+          avatarImage.setAttribute("hidden", "hidden");
+        }
+      }
+
+      if (avatarFallback) {
+        if (picture) {
+          avatarFallback.setAttribute("hidden", "hidden");
+        } else {
+          avatarFallback.removeAttribute("hidden");
+          avatarFallback.textContent = getInitials(profileUser.name || profileUser.email || "");
+        }
+      }
+
+      if (control) {
+        control.dataset.profilePicture = picture || "";
+        control.setAttribute("title", picture ? "View profile picture" : "Upload profile picture");
+      }
+    });
+  }
+
   function getApiBaseUrl() {
     const candidates = [
       window.WIRAM_API_BASE_URL,
@@ -166,7 +377,26 @@
   }
 
   function isApiConfigured() {
-    return Boolean(getApiBaseUrl());
+    return Boolean(getApiBaseUrl()) && !apiUnavailable;
+  }
+
+  function markApiUnavailable() {
+    apiUnavailable = true;
+  }
+
+  function isLocalDemoMode() {
+    return Boolean(
+      (window.WIRAM_CONFIG && window.WIRAM_CONFIG.LOCAL_DEMO_MODE) ||
+        window.localStorage.getItem("wiram_local_demo_mode") === "true"
+    );
+  }
+
+  function shouldUseLocalData() {
+    return !getApiBaseUrl() || isLocalDemoMode();
+  }
+
+  function isApiNetworkError(error) {
+    return Boolean(error && error.isNetworkError);
   }
 
   function getAuthToken() {
@@ -185,6 +415,7 @@
       email: user.email || "",
       role: normalizeRole(user.role),
       paymentMode: normalizePaymentMode(user.paymentMode),
+      profilePicture: user.profilePicture || user.avatar || user.photo || "",
       token: token || user.token || "",
       expiresAt: expiresAt || user.expiresAt || null
     };
@@ -201,6 +432,7 @@
       email: user.email,
       role: normalizeRole(user.role),
       paymentMode: normalizePaymentMode(user.paymentMode),
+      profilePicture: user.profilePicture || user.avatar || user.photo || "",
       createdAt: user.createdAt || null,
       updatedAt: user.updatedAt || null
     };
@@ -281,6 +513,7 @@
         body: body
       });
     } catch (error) {
+      markApiUnavailable();
       const networkError = new Error(
         "Unable to reach the WIRAM API. Check that the backend is running, or use the local demo accounts."
       );
@@ -304,58 +537,111 @@
     return payload;
   }
 
-  async function loadReportsForCurrentUser() {
-    const currentUser = getCurrentUser();
-    if (!isApiConfigured()) {
-      const reports = getReports();
-      if (!currentUser) {
-        return [];
-      }
-
-      if (normalizeRole(currentUser.role) === "member") {
-        return reports.filter(function (report) {
-          return report.reporterId === currentUser.id;
-        });
-      }
-
-      return reports;
+  function getPayloadArray(payload, key) {
+    if (Array.isArray(payload)) {
+      return payload;
     }
 
-    if (!currentUser) {
-      return [];
+    if (payload && Array.isArray(payload[key])) {
+      return payload[key];
     }
 
-    const endpoint = currentUser.role === "member" ? "/api/reports/my" : "/api/reports";
-    const payload = await apiRequest(endpoint);
-    const reports = Array.isArray(payload) ? payload.map(normalizeReportRecord) : [];
-    updateReportsCache(reports);
-    return reports;
+    return [];
   }
 
-  async function loadReportsForAllUsers() {
-    if (!isApiConfigured()) {
-      return getReports();
+  function getPayloadObject(payload, key) {
+    if (payload && payload[key]) {
+      return payload[key];
     }
 
-    const payload = await apiRequest("/api/reports");
-    const reports = Array.isArray(payload) ? payload.map(normalizeReportRecord) : [];
+    return payload;
+  }
+
+  function filterReportsForCurrentUser(reports, status) {
+    const currentUser = getCurrentUser();
+    const normalizedStatus = normalizeStatus(status || "all");
+
+    return reports.filter(function (report) {
+      const belongsToCurrentUser =
+        !currentUser ||
+        normalizeRole(currentUser.role) !== "member" ||
+        report.reporterId === currentUser.id;
+      const matchesStatus =
+        !normalizedStatus || normalizedStatus === "all" || normalizeStatus(report.status) === normalizedStatus;
+      return belongsToCurrentUser && matchesStatus;
+    });
+  }
+
+  async function loadReportsForCurrentUser(status) {
+    if (shouldUseLocalData()) {
+      return filterReportsForCurrentUser(getReports().map(normalizeReportRecord), status);
+    }
+
+    let payload;
+    try {
+      payload = await apiRequest("/api/reports");
+    } catch (error) {
+      if (isApiNetworkError(error) && shouldUseLocalData()) {
+        return filterReportsForCurrentUser(getReports().map(normalizeReportRecord), status);
+      }
+      throw error;
+    }
+
+    const reports = getPayloadArray(payload, "reports").map(normalizeReportRecord);
     updateReportsCache(reports);
-    return reports;
+    return filterReportsForCurrentUser(reports, status);
+  }
+
+  async function loadReportsForAllUsers(status) {
+    if (shouldUseLocalData()) {
+      const normalizedStatus = normalizeStatus(status || "all");
+      return getReports()
+        .map(normalizeReportRecord)
+        .filter(function (report) {
+          return !normalizedStatus || normalizedStatus === "all" || normalizeStatus(report.status) === normalizedStatus;
+        });
+    }
+
+    let payload;
+    try {
+      payload = await apiRequest("/api/reports");
+    } catch (error) {
+      if (isApiNetworkError(error) && shouldUseLocalData()) {
+        return loadReportsForAllUsers(status);
+      }
+      throw error;
+    }
+
+    const reports = getPayloadArray(payload, "reports").map(normalizeReportRecord);
+    updateReportsCache(reports);
+    const normalizedStatus = normalizeStatus(status || "all");
+    return reports.filter(function (report) {
+      return !normalizedStatus || normalizedStatus === "all" || normalizeStatus(report.status) === normalizedStatus;
+    });
   }
 
   async function loadUsersForAdmin() {
-    if (!isApiConfigured()) {
-      return getUsers();
+    if (shouldUseLocalData()) {
+      return getUsers().map(normalizeUserRecord);
     }
 
-    const payload = await apiRequest("/api/users");
-    const users = Array.isArray(payload) ? payload.map(normalizeUserRecord) : [];
+    let payload;
+    try {
+      payload = await apiRequest("/api/users");
+    } catch (error) {
+      if (isApiNetworkError(error) && shouldUseLocalData()) {
+        return getUsers().map(normalizeUserRecord);
+      }
+      throw error;
+    }
+
+    const users = getPayloadArray(payload, "users").map(normalizeUserRecord);
     updateUsersCache(users);
     return users;
   }
 
   async function loadDashboardData() {
-    if (!isApiConfigured()) {
+    if (shouldUseLocalData()) {
       const reports = getReports();
       const users = getUsers();
       const counts = statusCounts(reports);
@@ -379,7 +665,15 @@
       };
     }
 
-    const payload = await apiRequest("/api/dashboard");
+    let payload;
+    try {
+      payload = await apiRequest("/api/dashboard");
+    } catch (error) {
+      if (isApiNetworkError(error) && shouldUseLocalData()) {
+        return loadDashboardData();
+      }
+      throw error;
+    }
     const recentReports = Array.isArray(payload.recentReports)
       ? payload.recentReports.map(normalizeReportRecord)
       : [];
@@ -398,7 +692,7 @@
   }
 
   async function loadReportDetail(reportId) {
-    if (!isApiConfigured()) {
+    if (shouldUseLocalData()) {
       const report = getReports().find(function (item) {
         return item.id === reportId;
       });
@@ -408,10 +702,19 @@
       return report;
     }
 
-    const payload = await apiRequest("/api/reports/" + encodeURIComponent(reportId));
-    const detail = normalizeReportRecord(payload);
-    if (payload && Array.isArray(payload.history)) {
-      detail.history = payload.history.map(function (history) {
+    let payload;
+    try {
+      payload = await apiRequest("/api/reports/" + encodeURIComponent(reportId));
+    } catch (error) {
+      if (isApiNetworkError(error) && shouldUseLocalData()) {
+        return loadReportDetail(reportId);
+      }
+      throw error;
+    }
+    const reportPayload = getPayloadObject(payload, "report");
+    const detail = normalizeReportRecord(reportPayload);
+    if (reportPayload && Array.isArray(reportPayload.history)) {
+      detail.history = reportPayload.history.map(function (history) {
         return {
           id: history.id,
           status: normalizeStatus(history.status),
@@ -429,7 +732,7 @@
       method: "POST",
       body: JSON.stringify(payload)
     });
-    return normalizeReportRecord(response);
+    return normalizeReportRecord(getPayloadObject(response, "report"));
   }
 
   async function updateRemoteReportStatus(reportId, status, notes) {
@@ -440,7 +743,7 @@
         notes: notes || ""
       })
     });
-    return normalizeReportRecord(response);
+    return normalizeReportRecord(getPayloadObject(response, "report"));
   }
 
   async function updateRemoteReportPaymentMode(reportId, paymentMode) {
@@ -453,7 +756,7 @@
         })
       }
     );
-    return normalizeReportRecord(response);
+    return normalizeReportRecord(getPayloadObject(response, "report"));
   }
 
   async function updateRemoteUserRole(userId, role) {
@@ -463,7 +766,7 @@
         role: String(role || "").toUpperCase()
       })
     });
-    return normalizeUserRecord(response);
+    return normalizeUserRecord(getPayloadObject(response, "user"));
   }
 
   async function updateRemotePaymentMode(paymentMode) {
@@ -527,7 +830,11 @@
 
     try {
       const response = await apiRequest("/api/auth/me");
-      const session = normalizeSessionUser(response, currentUser.token, currentUser.expiresAt);
+      const userPayload = getPayloadObject(response, "user");
+      const session = normalizeSessionUser(userPayload, currentUser.token, currentUser.expiresAt);
+      if (session && session.token) {
+        window.localStorage.removeItem("wiram_local_demo_mode");
+      }
       setCurrentUser(session);
       return session;
     } catch (error) {
@@ -790,6 +1097,8 @@
       document.querySelectorAll(".js-payment-mode").forEach(function (node) {
         node.textContent = formatPaymentMode(user.paymentMode);
       });
+
+      renderUserProfileControls(user);
     }
 
     document.querySelectorAll(".js-current-year").forEach(function (node) {
@@ -895,8 +1204,14 @@
     }
 
     if (isApiConfigured()) {
-      const savedMode = await updateRemotePaymentMode(normalized);
-      return setLocalPaymentMode(savedMode);
+      try {
+        const savedMode = await updateRemotePaymentMode(normalized);
+        return setLocalPaymentMode(savedMode);
+      } catch (error) {
+        if (!isApiNetworkError(error)) {
+          throw error;
+        }
+      }
     }
 
     return setLocalPaymentMode(normalized);
@@ -1379,6 +1694,7 @@
     formatPaymentMode: formatPaymentMode,
     getApiBaseUrl: getApiBaseUrl,
     isApiConfigured: isApiConfigured,
+    isApiNetworkError: isApiNetworkError,
     apiRequest: apiRequest,
     loadReportsForCurrentUser: loadReportsForCurrentUser,
     loadReportsForAllUsers: loadReportsForAllUsers,
@@ -1396,6 +1712,8 @@
     logoutRemoteUser: logoutRemoteUser,
     verifyCurrentSession: verifyCurrentSession,
     seedMockData: seedMockData,
+    shouldUseLocalData: shouldUseLocalData,
+    isLocalDemoMode: isLocalDemoMode,
     showAlert: showAlert,
     showSpinner: showSpinner,
     hideSpinner: hideSpinner,
@@ -1408,7 +1726,9 @@
   };
 
   document.addEventListener("DOMContentLoaded", async function () {
-    seedMockData();
+    if (shouldUseLocalData() || !getUsers().length) {
+      seedMockData();
+    }
 
     if (isApiConfigured()) {
       try {

@@ -52,6 +52,7 @@ async function initializeSchema(pool) {
       estimated_loss NUMERIC(12, 2) NOT NULL DEFAULT 0,
       evidence_name TEXT,
       evidence_data TEXT,
+      payment_mode TEXT NOT NULL DEFAULT 'MPESA',
       status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending', 'verified', 'rejected', 'paid')),
       reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -60,6 +61,16 @@ async function initializeSchema(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='reports' AND column_name='payment_mode'
+      ) THEN
+        ALTER TABLE reports ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'MPESA';
+      END IF;
+    END $$;
   `);
 
   await pool.query(`
