@@ -162,7 +162,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     report.setLocation(location);
     report.setDescription(
         "A demo report for " + animal.toLowerCase() + " related " + incident.toLowerCase() + ".");
-    report.setEstimatedLoss(new BigDecimal("25000.00"));
+    report.setEstimatedLoss(new BigDecimal("24000.00"));
     report.setEvidenceName(animal.toLowerCase() + "-evidence.png");
     report.setCreatedAt(createdAt);
     report.setUpdatedAt(createdAt);
