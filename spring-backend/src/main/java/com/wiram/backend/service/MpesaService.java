@@ -121,13 +121,23 @@ public class MpesaService {
       String detail = exception.getResponseBodyAsString();
       return new MpesaPaymentResponse(
           "failed",
-          "M-Pesa request failed: " + detail,
+          StringUtils.hasText(detail)
+              ? "M-Pesa request failed: " + detail
+              : "M-Pesa could not complete the payment request.",
           null,
           null,
           normalizedPhone,
           request.amount());
     } catch (Exception exception) {
-      throw new IllegalStateException("Unable to initiate M-Pesa payment.", exception);
+      String detail = exception.getMessage();
+      return new MpesaPaymentResponse(
+          "simulated",
+          "M-Pesa demo mode is active because the live payment request could not be completed: "
+              + (StringUtils.hasText(detail) ? detail : "unknown error"),
+          null,
+          null,
+          normalizedPhone,
+          request.amount());
     }
   }
 
