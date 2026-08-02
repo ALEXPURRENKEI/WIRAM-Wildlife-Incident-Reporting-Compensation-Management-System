@@ -18,7 +18,8 @@
     users: "wiram_users",
     reports: "wiram_reports",
     session: "wiram_session",
-    flash: "wiram_flash"
+    flash: "wiram_flash",
+    compensationContacts: "wiram_compensation_contacts"
   };
 
   const ROLE_HOME = {
@@ -55,7 +56,15 @@
   function getCurrentUser() {
     return safeParse(localStorage.getItem(STORAGE_KEYS.session), null);
   }
-
+ 
+  function getCompensationContacts() {
+    return safeParse(localStorage.getItem(STORAGE_KEYS.compensationContacts), {});
+  }
+ 
+  function setCompensationContacts(contacts) {
+    localStorage.setItem(STORAGE_KEYS.compensationContacts, JSON.stringify(contacts || {}));
+  }
+ 
   function setCurrentUser(user) {
     if (!user) {
       clearCurrentUser();
@@ -68,6 +77,8 @@
       email: user.email || "",
       role: normalizeRole(user.role),
       paymentMode: normalizePaymentMode(user.paymentMode),
+      paymentPhone: normalizePaymentPhone(user.paymentPhone),
+      paymentBankAccount: normalizeBankAccount(user.paymentBankAccount),
       profilePicture: user.profilePicture || user.avatar || user.photo || "",
       token: user.token || "",
       expiresAt: user.expiresAt || null
@@ -150,6 +161,73 @@
     return labels[normalized] || normalized || "-";
   }
 
+  function normalizePaymentPhone(value) {
+    return String(value || "").trim();
+  }
+
+  function normalizeBankAccount(value) {
+    return String(value || "").trim();
+  }
+
+  function getPaymentDetailsForMode(mode, details) {
+    const normalizedMode = normalizePaymentMode(mode);
+    const values = details || {};
+    return {
+      paymentPhone: normalizedMode === "MPESA" ? normalizePaymentPhone(values.paymentPhone) : "",
+      paymentBankAccount:
+        normalizedMode === "BANK_TRANSFER" ? normalizeBankAccount(values.paymentBankAccount) : ""
+    };
+  }
+
+  function validatePaymentDetails(mode, details) {
+    const normalizedMode = normalizePaymentMode(mode);
+    const values = getPaymentDetailsForMode(normalizedMode, details);
+    if (normalizedMode === "MPESA" && !values.paymentPhone) {
+      throw new Error("Please enter your telephone number for M-Pesa payments.");
+    }
+    if (normalizedMode === "BANK_TRANSFER" && !values.paymentBankAccount) {
+      throw new Error("Please enter your bank account number for bank transfer payments.");
+    }
+    return values;
+  }
+
+  function formatPaymentDetails(mode, details) {
+    const normalizedMode = normalizePaymentMode(mode);
+    const values = details || {};
+    if (normalizedMode === "MPESA" && values.paymentPhone) {
+      return "Phone: " + normalizePaymentPhone(values.paymentPhone);
+    }
+    if (normalizedMode === "BANK_TRANSFER" && values.paymentBankAccount) {
+      return "Bank account: " + normalizeBankAccount(values.paymentBankAccount);
+    }
+    return "";
+  }
+
+  function syncPaymentDetailFields(select, phoneInput, bankInput) {
+    if (!select) {
+      return;
+    }
+
+    const mode = normalizePaymentMode(select.value);
+    document.querySelectorAll(".payment-detail-fields").forEach(function (group) {
+      const expectedMode = normalizePaymentMode(group.getAttribute("data-payment-detail"));
+      const shouldShow = expectedMode && expectedMode === mode;
+      group.classList.toggle("hidden", !shouldShow);
+      group.querySelectorAll("input").forEach(function (input) {
+        input.required = shouldShow;
+        if (!shouldShow) {
+          input.value = "";
+        }
+      });
+    });
+
+    if (phoneInput) {
+      phoneInput.required = mode === "MPESA";
+    }
+    if (bankInput) {
+      bankInput.required = mode === "BANK_TRANSFER";
+    }
+  }
   function getUserProfilePicture(user) {
     return user && (user.profilePicture || user.avatar || user.photo || "");
   }
@@ -415,6 +493,8 @@
       email: user.email || "",
       role: normalizeRole(user.role),
       paymentMode: normalizePaymentMode(user.paymentMode),
+      paymentPhone: normalizePaymentPhone(user.paymentPhone),
+      paymentBankAccount: normalizeBankAccount(user.paymentBankAccount),
       profilePicture: user.profilePicture || user.avatar || user.photo || "",
       token: token || user.token || "",
       expiresAt: expiresAt || user.expiresAt || null
@@ -432,6 +512,8 @@
       email: user.email,
       role: normalizeRole(user.role),
       paymentMode: normalizePaymentMode(user.paymentMode),
+      paymentPhone: normalizePaymentPhone(user.paymentPhone),
+      paymentBankAccount: normalizeBankAccount(user.paymentBankAccount),
       profilePicture: user.profilePicture || user.avatar || user.photo || "",
       createdAt: user.createdAt || null,
       updatedAt: user.updatedAt || null
@@ -458,6 +540,8 @@
       reporterName: report.reporterName || report.reporter?.name || "",
       reporterEmail: report.reporterEmail || report.reporter?.email || "",
       paymentMode: normalizePaymentMode(report.paymentMode),
+      paymentPhone: normalizePaymentPhone(report.paymentPhone),
+      paymentBankAccount: normalizeBankAccount(report.paymentBankAccount),
       reviewedBy: report.reviewedBy || "",
       reviewedByName: report.reviewedByName || "",
       reviewedAt: report.reviewedAt || null,
@@ -769,14 +853,17 @@
     return normalizeUserRecord(getPayloadObject(response, "user"));
   }
 
-  async function updateRemotePaymentMode(paymentMode) {
+  async function updateRemotePaymentMode(paymentMode, details) {
+    const paymentDetails = getPaymentDetailsForMode(paymentMode, details);
     const response = await apiRequest("/api/users/me/payment-mode", {
       method: "PATCH",
       body: JSON.stringify({
-        paymentMode: normalizePaymentMode(paymentMode)
+        paymentMode: normalizePaymentMode(paymentMode),
+        paymentPhone: paymentDetails.paymentPhone,
+        paymentBankAccount: paymentDetails.paymentBankAccount
       })
     });
-    return normalizePaymentMode(response.paymentMode);
+    return normalizeUserRecord(getPayloadObject(response, "user"));
   }
 
   async function loginRemoteUser(payload) {
@@ -1168,8 +1255,9 @@
     });
   }
 
-  function setLocalPaymentMode(paymentMode) {
+  function setLocalPaymentMode(paymentMode, details) {
     const normalized = normalizePaymentMode(paymentMode);
+    const paymentDetails = getPaymentDetailsForMode(normalized, details);
     const currentUser = getCurrentUser();
     if (!currentUser) {
       return null;
@@ -1181,6 +1269,9 @@
       email: currentUser.email,
       role: currentUser.role,
       paymentMode: normalized,
+      paymentPhone: paymentDetails.paymentPhone,
+      paymentBankAccount: paymentDetails.paymentBankAccount,
+      profilePicture: currentUser.profilePicture,
       token: currentUser.token,
       expiresAt: currentUser.expiresAt
     };
@@ -1190,23 +1281,28 @@
       if (user.id !== currentUser.id) {
         return user;
       }
-      return Object.assign({}, user, { paymentMode: normalized });
+      return Object.assign({}, user, {
+        paymentMode: normalized,
+        paymentPhone: paymentDetails.paymentPhone,
+        paymentBankAccount: paymentDetails.paymentBankAccount
+      });
     });
     setUsers(users);
 
     return updatedUser;
   }
 
-  async function savePaymentMode(paymentMode) {
+  async function savePaymentMode(paymentMode, details) {
     const normalized = normalizePaymentMode(paymentMode);
     if (!normalized) {
       throw new Error("Please select a payment mode.");
     }
+    const paymentDetails = validatePaymentDetails(normalized, details);
 
     if (isApiConfigured()) {
       try {
-        const savedMode = await updateRemotePaymentMode(normalized);
-        return setLocalPaymentMode(savedMode);
+        const savedUser = await updateRemotePaymentMode(normalized, paymentDetails);
+        return setLocalPaymentMode(savedUser.paymentMode, savedUser);
       } catch (error) {
         if (!isApiNetworkError(error)) {
           throw error;
@@ -1214,12 +1310,14 @@
       }
     }
 
-    return setLocalPaymentMode(normalized);
+    return setLocalPaymentMode(normalized, paymentDetails);
   }
 
   function initPaymentModeForm() {
     const form = document.getElementById("paymentModeForm");
     const select = document.getElementById("paymentMode");
+    const phoneInput = document.getElementById("paymentPhone");
+    const bankInput = document.getElementById("paymentBankAccount");
     if (!form || !select || form.dataset.bound) {
       return;
     }
@@ -1228,14 +1326,35 @@
     if (currentUser && currentUser.paymentMode) {
       select.value = normalizePaymentMode(currentUser.paymentMode);
     }
+    if (phoneInput && currentUser && currentUser.paymentPhone) {
+      phoneInput.value = normalizePaymentPhone(currentUser.paymentPhone);
+    }
+    if (bankInput && currentUser && currentUser.paymentBankAccount) {
+      bankInput.value = normalizeBankAccount(currentUser.paymentBankAccount);
+    }
+    syncPaymentDetailFields(select, phoneInput, bankInput);
+
+    select.addEventListener("change", function () {
+      syncPaymentDetailFields(select, phoneInput, bankInput);
+    });
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       showSpinner();
-      savePaymentMode(select.value)
+      savePaymentMode(select.value, {
+        paymentPhone: phoneInput ? phoneInput.value : "",
+        paymentBankAccount: bankInput ? bankInput.value : ""
+      })
         .then(function (updatedUser) {
           if (updatedUser) {
             select.value = normalizePaymentMode(updatedUser.paymentMode);
+            if (phoneInput) {
+              phoneInput.value = normalizePaymentPhone(updatedUser.paymentPhone);
+            }
+            if (bankInput) {
+              bankInput.value = normalizeBankAccount(updatedUser.paymentBankAccount);
+            }
+            syncPaymentDetailFields(select, phoneInput, bankInput);
             document.querySelectorAll(".js-payment-mode").forEach(function (node) {
               node.textContent = formatPaymentMode(updatedUser.paymentMode);
             });
@@ -1251,6 +1370,99 @@
     });
 
     form.dataset.bound = "true";
+  }
+
+  function initCompensationContactForms() {
+    const communityForm = document.getElementById("communityCompensationForm");
+    const partnerForm = document.getElementById("partnerCompensationForm");
+    const communityPhoneInput = document.getElementById("communityCompensationPhone");
+    const partnerPhoneInput = document.getElementById("partnerCompensationPhone");
+    const partnerOrgSelect = document.getElementById("partnerCompensationOrg");
+
+    if (!communityForm && !partnerForm) {
+      return;
+    }
+
+    const contacts = getCompensationContacts();
+    if (communityPhoneInput) {
+      const currentUser = getCurrentUser();
+      const currentPhone = currentUser && currentUser.paymentPhone ? normalizePaymentPhone(currentUser.paymentPhone) : "";
+      communityPhoneInput.value = currentPhone || normalizePaymentPhone(contacts.communityPhone);
+    }
+
+    if (partnerPhoneInput) {
+      partnerPhoneInput.value = normalizePaymentPhone(contacts.partnerPhone);
+    }
+
+    if (partnerOrgSelect) {
+      partnerOrgSelect.value = contacts.partnerOrganization || "";
+    }
+
+    if (communityForm) {
+      communityForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        if (!communityPhoneInput) {
+          return;
+        }
+
+        const phone = normalizePaymentPhone(communityPhoneInput.value);
+        if (!phone) {
+          showAlert("Please enter a phone number for compensation.", "error");
+          return;
+        }
+
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          showSpinner();
+          const preferredMode = normalizePaymentMode(currentUser.paymentMode) || "MPESA";
+          savePaymentMode(preferredMode, {
+            paymentPhone: phone,
+            paymentBankAccount: currentUser.paymentBankAccount || ""
+          })
+            .then(function () {
+              showAlert("Compensation phone number saved to your profile.", "success");
+            })
+            .catch(function (error) {
+              showAlert(error.message || "Unable to save your compensation phone number.", "error");
+            })
+            .finally(function () {
+              hideSpinner();
+            });
+          return;
+        }
+
+        const updatedContacts = getCompensationContacts();
+        updatedContacts.communityPhone = phone;
+        setCompensationContacts(updatedContacts);
+        showAlert("Phone number saved on this device. Sign in to attach it to your account.", "success");
+      });
+    }
+
+    if (partnerForm) {
+      partnerForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        if (!partnerPhoneInput || !partnerOrgSelect) {
+          return;
+        }
+
+        const organization = String(partnerOrgSelect.value || "").trim();
+        const phone = normalizePaymentPhone(partnerPhoneInput.value);
+        if (!organization) {
+          showAlert("Please select an organization for the compensation payment.", "error");
+          return;
+        }
+        if (!phone) {
+          showAlert("Please enter a phone number for compensation payments.", "error");
+          return;
+        }
+
+        const updatedContacts = getCompensationContacts();
+        updatedContacts.partnerOrganization = organization;
+        updatedContacts.partnerPhone = phone;
+        setCompensationContacts(updatedContacts);
+        showAlert("Enter M-Pesa PIN for the KWS/Enkaretoni number to complete the payment.", "success");
+      });
+    }
   }
 
   // Admin user table rendering and role updates.
@@ -1691,6 +1903,11 @@
     normalizeRole: normalizeRole,
     normalizeStatus: normalizeStatus,
     normalizePaymentMode: normalizePaymentMode,
+    normalizePaymentPhone: normalizePaymentPhone,
+    normalizeBankAccount: normalizeBankAccount,
+    validatePaymentDetails: validatePaymentDetails,
+    formatPaymentDetails: formatPaymentDetails,
+    syncPaymentDetailFields: syncPaymentDetailFields,
     formatPaymentMode: formatPaymentMode,
     getApiBaseUrl: getApiBaseUrl,
     isApiConfigured: isApiConfigured,
@@ -1750,5 +1967,8 @@
     await refreshDashboardViews();
     await initManageUsersPage();
     initPaymentModeForm();
+    initCompensationContactForms();
   });
 })();
+
+
