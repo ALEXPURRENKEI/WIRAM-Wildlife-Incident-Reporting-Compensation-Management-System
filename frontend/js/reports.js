@@ -117,6 +117,15 @@
     );
   }
 
+  function paymentDisplay(report) {
+    const detail = window.WIRAM.formatPaymentDetails(report.paymentMode, report);
+    const mode = window.WIRAM.escapeHtml(window.WIRAM.formatPaymentMode(report.paymentMode));
+    if (!detail) {
+      return mode;
+    }
+    return mode + '<div class="muted table-note">' + window.WIRAM.escapeHtml(detail) + '</div>';
+  }
+
   function reportActions(report, actionContext) {
     let actions =
       '<button class="btn btn-secondary btn-sm" data-action="view" data-report-id="' +
@@ -201,7 +210,7 @@
           window.WIRAM.formatCurrency(report.estimatedLoss) +
           "</td>" +
           "<td>" +
-          window.WIRAM.escapeHtml(window.WIRAM.formatPaymentMode(report.paymentMode)) +
+          paymentDisplay(report) +
           "</td>" +
           "<td>" +
           statusBadge(report.status) +
@@ -220,13 +229,15 @@
     bindTableActions(tableBody);
   }
 
-  async function updateStatus(reportId, status) {
+  async function updateStatus(reportId, status, notes) {
     const normalized = normalizeStatus(status);
     const valid = ["pending", "verified", "rejected", "paid"];
     if (valid.indexOf(normalized) === -1) {
       window.WIRAM.showAlert("Invalid status selected.", "error");
       return false;
     }
+
+    const statusNotes = String(notes || "").trim();
 
     const localReports = window.WIRAM.getReports();
     const localReport = localReports.find(function (item) {
@@ -242,7 +253,7 @@
     try {
       if (window.WIRAM.isApiConfigured()) {
         try {
-          await window.WIRAM.updateRemoteReportStatus(reportId, normalized, "");
+          await window.WIRAM.updateRemoteReportStatus(reportId, normalized, statusNotes);
         } catch (error) {
           if (!window.WIRAM.isApiNetworkError || !window.WIRAM.isApiNetworkError(error) || !localReport || !window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData()) {
             throw error;
@@ -260,6 +271,20 @@
         if (currentUser) {
           localReport.reviewedBy = currentUser.name;
           localReport.reviewedByName = currentUser.name;
+        }
+        if (statusNotes) {
+          if (!Array.isArray(localReport.history)) {
+            localReport.history = [];
+          }
+          localReport.history.unshift({
+            id: window.WIRAM.createId("HIS"),
+            reportId: reportId,
+            status: normalized,
+            notes: statusNotes,
+            changedBy: currentUser ? currentUser.id : "",
+            changedByName: currentUser ? currentUser.name : "System",
+            changedAt: localReport.updatedAt
+          });
         }
         window.WIRAM.setReports(localReports);
       }
@@ -299,7 +324,7 @@
     try {
       if (window.WIRAM.isApiConfigured()) {
         try {
-          await window.WIRAM.updateRemoteReportPaymentMode(reportId, normalized);
+          await window.WIRAM.updateRemoteReportPaymentMode(reportId, normalized, localReport || {});
         } catch (error) {
           if (!window.WIRAM.isApiNetworkError || !window.WIRAM.isApiNetworkError(error) || !localReport || !window.WIRAM.shouldUseLocalData || !window.WIRAM.shouldUseLocalData()) {
             throw error;
@@ -460,6 +485,9 @@
       window.WIRAM.escapeHtml(window.WIRAM.formatPaymentMode(report.paymentMode)) +
       paymentModeControl +
       "</div>" +
+      '<div class="detail-item"><strong>Compensation Recipient</strong>' +
+      window.WIRAM.escapeHtml(window.WIRAM.formatPaymentDetails(report.paymentMode, report) || "Not provided") +
+      "</div>" +
       '<div class="detail-item"><strong>Submitted</strong>' +
       window.WIRAM.formatDate(report.createdAt) +
       "</div>" +
@@ -579,6 +607,17 @@
       return false;
     }
 
+    let paymentDetails;
+    try {
+      paymentDetails = window.WIRAM.validatePaymentDetails(paymentMode, {
+        paymentPhone: data.get("paymentPhone"),
+        paymentBankAccount: data.get("paymentBankAccount")
+      });
+    } catch (error) {
+      window.WIRAM.showAlert(error.message, "error");
+      return false;
+    }
+
     if (!Number.isFinite(estimatedLoss) || estimatedLoss <= 0) {
       window.WIRAM.showAlert("Estimated loss must be greater than 0.", "error");
       return false;
@@ -611,6 +650,8 @@
             description: description,
             estimatedLoss: estimatedLoss,
             paymentMode: paymentMode,
+            paymentPhone: paymentDetails.paymentPhone,
+            paymentBankAccount: paymentDetails.paymentBankAccount,
             evidenceName: evidenceName,
             evidenceData: evidenceData
           });
@@ -639,6 +680,8 @@
           evidenceName: evidenceName,
           evidenceData: evidenceData,
           paymentMode: paymentMode,
+          paymentPhone: paymentDetails.paymentPhone,
+          paymentBankAccount: paymentDetails.paymentBankAccount,
           status: "pending",
           reporterId: currentUser.id,
           reporterName: currentUser.name,
@@ -800,6 +843,220 @@
       actionContext: "admin",
       emptyMessage: "No incidents available."
     });
+    renderIncidentPaymentOptions(reports);
+  }
+
+  function getSelectedPaymentReport(select) {
+    const reports = select && Array.isArray(select.__paymentReports) ? select.__paymentReports : [];
+    return reports.find(function (report) {
+      return report.id === select.value;
+    });
+  }
+
+  function paymentReportLabel(report) {
+    return [
+      report.id,
+      report.reporterName || "Community member",
+      report.location || "Unknown location",
+      window.WIRAM.formatCurrency(report.estimatedLoss)
+    ].join(" - ");
+  }
+
+  function updatePaymentReportSummary(report) {
+    const summary = document.getElementById("paymentReportSummary");
+    if (!summary) {
+      return;
+    }
+
+    if (!report) {
+      summary.textContent = "Select a verified incident to review the payment details.";
+      return;
+    }
+
+    summary.textContent =
+      "Ready to pay " +
+      window.WIRAM.formatCurrency(report.estimatedLoss) +
+      " to " +
+      (report.reporterName || "the community member") +
+      " using " +
+      window.WIRAM.formatPaymentMode(report.paymentMode) +
+      (window.WIRAM.formatPaymentDetails(report.paymentMode, report)
+        ? " (" + window.WIRAM.formatPaymentDetails(report.paymentMode, report) + ")"
+        : "") +
+      ".";
+  }
+
+  function renderIncidentPaymentOptions(reports) {
+    const select = document.getElementById("paymentReport");
+    const amount = document.getElementById("paymentAmount");
+    const modeSelect = document.getElementById("paymentModeUsed");
+    if (!select) {
+      return;
+    }
+
+    const previousValue = select.value;
+    const payableReports = reports.filter(function (report) {
+      return normalizeStatus(report.status) === "verified";
+    });
+    select.__paymentReports = payableReports;
+
+    if (!payableReports.length) {
+      select.innerHTML = '<option value="">No verified incidents awaiting payment</option>';
+      select.disabled = true;
+      if (amount) {
+        amount.value = "";
+      }
+      if (modeSelect) {
+        modeSelect.value = "";
+      }
+      updatePaymentReportSummary(null);
+      return;
+    }
+
+    select.disabled = false;
+    select.innerHTML =
+      '<option value="">Select verified incident</option>' +
+      payableReports
+        .map(function (report) {
+          return (
+            '<option value="' +
+            window.WIRAM.escapeHtml(report.id) +
+            '">' +
+            window.WIRAM.escapeHtml(paymentReportLabel(report)) +
+            "</option>"
+          );
+        })
+        .join("");
+
+    if (payableReports.some(function (report) { return report.id === previousValue; })) {
+      select.value = previousValue;
+    }
+
+    const selectedReport = getSelectedPaymentReport(select);
+    if (selectedReport && amount && !amount.value) {
+      amount.value = String(Number(selectedReport.estimatedLoss) || 0);
+    }
+    if (modeSelect) {
+      modeSelect.value = selectedReport ? window.WIRAM.normalizePaymentMode(selectedReport.paymentMode) : "";
+    }
+    updatePaymentReportSummary(selectedReport);
+  }
+
+  function bindIncidentPaymentForm() {
+    const form = document.getElementById("incidentPaymentForm");
+    const partnerSelect = document.getElementById("paymentPartner");
+    const reportSelect = document.getElementById("paymentReport");
+    const amountInput = document.getElementById("paymentAmount");
+    const modeSelect = document.getElementById("paymentModeUsed");
+    const payerPhoneInput = document.getElementById("payerPhone");
+    if (!form || !partnerSelect || !reportSelect || !amountInput || !modeSelect || !payerPhoneInput || form.dataset.bound) {
+      return;
+    }
+
+    reportSelect.addEventListener("change", function () {
+      const report = getSelectedPaymentReport(reportSelect);
+      amountInput.value = report ? String(Number(report.estimatedLoss) || 0) : "";
+      modeSelect.value = report ? window.WIRAM.normalizePaymentMode(report.paymentMode) : "";
+      updatePaymentReportSummary(report);
+    });
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      const partner = String(partnerSelect.value || "").trim();
+      const report = getSelectedPaymentReport(reportSelect);
+      const amount = Number(amountInput.value || 0);
+      const paymentMode = window.WIRAM.normalizePaymentMode(modeSelect.value);
+      const memberPaymentMode = window.WIRAM.normalizePaymentMode(report && report.paymentMode);
+      const payerPhone = window.WIRAM.normalizeMpesaPhoneNumber(payerPhoneInput.value);
+
+      if (!partner) {
+        window.WIRAM.showAlert("Please select KWS or Enkaretoni CBO.", "error");
+        return;
+      }
+
+      if (!report) {
+        window.WIRAM.showAlert("Please select a verified incident to pay.", "error");
+        return;
+      }
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        window.WIRAM.showAlert("Payment amount must be greater than 0.", "error");
+        return;
+      }
+
+      if (!paymentMode) {
+        window.WIRAM.showAlert("Please select the community member's payment mode.", "error");
+        return;
+      }
+
+      if (!payerPhone) {
+        window.WIRAM.showAlert("Please enter the KWS or Enkaretoni phone number making the compensation.", "error");
+        return;
+      }
+
+      if (memberPaymentMode && paymentMode !== memberPaymentMode) {
+        window.WIRAM.showAlert("Use the payment mode selected by the community member.", "error");
+        return;
+      }
+
+      const promptMessage =
+        "Enter M-Pesa PIN for " + payerPhone + " to pay " + window.WIRAM.formatCurrency(amount) + ".";
+      const summary = document.getElementById("paymentReportSummary");
+      if (summary) {
+        summary.textContent = promptMessage;
+      }
+
+      window.WIRAM.showSpinner();
+      void window.WIRAM
+        .initiateMpesaPayment({
+          phoneNumber: payerPhone,
+          amount: Math.round(amount),
+          partnerName: partner,
+          reference: report.id
+        })
+        .then(function (response) {
+          const responseMessage = response && response.message ? response.message : promptMessage;
+          const message = response && response.status === "failed" ? responseMessage : promptMessage + " " + responseMessage;
+          if (summary) {
+            summary.textContent = message;
+          }
+          if (response && response.status === "failed") {
+            window.WIRAM.showAlert(responseMessage, "error");
+            return false;
+          }
+
+          window.WIRAM.showAlert(promptMessage, "success");
+          const notes =
+            "Payment made by " +
+            partner +
+            " for " +
+            window.WIRAM.formatCurrency(amount) +
+            " via " +
+            window.WIRAM.formatPaymentMode(paymentMode) +
+            " from " +
+            payerPhone +
+            (window.WIRAM.formatPaymentDetails(report.paymentMode, report)
+              ? " to " + window.WIRAM.formatPaymentDetails(report.paymentMode, report)
+              : "") +
+            ". " +
+            responseMessage;
+          return updateStatus(report.id, "paid", notes).then(function (paid) {
+            if (paid) {
+              form.reset();
+            }
+            return paid;
+          });
+        })
+        .catch(function (error) {
+          window.WIRAM.showAlert(error.message || "Unable to initiate M-Pesa payment.", "error");
+          return false;
+        })
+        .finally(function () {
+          window.WIRAM.hideSpinner();
+        });
+    });
+
+    form.dataset.bound = "true";
   }
 
   function bindFilters() {
@@ -837,9 +1094,23 @@
     }
 
     const paymentSelect = document.getElementById("paymentMode");
+    const phoneInput = document.getElementById("reportPaymentPhone");
+    const bankInput = document.getElementById("reportPaymentBankAccount");
     const currentUser = window.WIRAM.getCurrentUser();
     if (paymentSelect && currentUser && currentUser.paymentMode) {
       paymentSelect.value = window.WIRAM.normalizePaymentMode(currentUser.paymentMode);
+    }
+    if (phoneInput && currentUser && currentUser.paymentPhone) {
+      phoneInput.value = window.WIRAM.normalizePaymentPhone(currentUser.paymentPhone);
+    }
+    if (bankInput && currentUser && currentUser.paymentBankAccount) {
+      bankInput.value = window.WIRAM.normalizeBankAccount(currentUser.paymentBankAccount);
+    }
+    if (paymentSelect) {
+      window.WIRAM.syncPaymentDetailFields(paymentSelect, phoneInput, bankInput);
+      paymentSelect.addEventListener("change", function () {
+        window.WIRAM.syncPaymentDetailFields(paymentSelect, phoneInput, bankInput);
+      });
     }
 
     form.addEventListener("submit", function (event) {
@@ -858,8 +1129,10 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     bindReportForm();
+    bindIncidentPaymentForm();
     bindFilters();
     void refreshReportViews();
   });
 })();
+
 

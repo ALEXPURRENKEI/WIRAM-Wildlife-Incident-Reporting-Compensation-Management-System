@@ -165,6 +165,32 @@
     return String(value || "").trim();
   }
 
+  function normalizeMpesaPhoneNumber(value) {
+    const cleaned = String(value || "").trim();
+    if (!cleaned) {
+      return "";
+    }
+
+    const digits = cleaned.replace(/\D/g, "");
+    if (!digits) {
+      return "";
+    }
+
+    if (digits.startsWith("254")) {
+      return digits;
+    }
+    if (digits.startsWith("07")) {
+      return "254" + digits.slice(1);
+    }
+    if (digits.startsWith("7")) {
+      return "254" + digits;
+    }
+    if (digits.startsWith("0")) {
+      return "254" + digits.slice(1);
+    }
+    return digits;
+  }
+
   function normalizeBankAccount(value) {
     return String(value || "").trim();
   }
@@ -830,6 +856,19 @@
     return normalizeReportRecord(getPayloadObject(response, "report"));
   }
 
+  async function initiateMpesaPayment(payload) {
+    const response = await apiRequest("/api/payments/mpesa", {
+      method: "POST",
+      body: JSON.stringify({
+        phoneNumber: normalizeMpesaPhoneNumber(payload && payload.phoneNumber),
+        amount: Number(payload && payload.amount) || 0,
+        partnerName: String(payload && payload.partnerName ? payload.partnerName : "").trim(),
+        reference: String(payload && payload.reference ? payload.reference : "").trim()
+      })
+    });
+    return response || {};
+  }
+
   async function updateRemoteReportPaymentMode(reportId, paymentMode) {
     const response = await apiRequest(
       "/api/reports/" + encodeURIComponent(reportId) + "/payment-mode",
@@ -1460,7 +1499,7 @@
         updatedContacts.partnerOrganization = organization;
         updatedContacts.partnerPhone = phone;
         setCompensationContacts(updatedContacts);
-        showAlert("Enter M-Pesa PIN for the KWS/Enkaretoni number to complete the payment.", "success");
+        showAlert("Enter M-Pesa PIN for " + phone + " to complete the payment.", "success");
       });
     }
   }
@@ -1904,6 +1943,7 @@
     normalizeStatus: normalizeStatus,
     normalizePaymentMode: normalizePaymentMode,
     normalizePaymentPhone: normalizePaymentPhone,
+    normalizeMpesaPhoneNumber: normalizeMpesaPhoneNumber,
     normalizeBankAccount: normalizeBankAccount,
     validatePaymentDetails: validatePaymentDetails,
     formatPaymentDetails: formatPaymentDetails,
@@ -1920,6 +1960,7 @@
     loadReportDetail: loadReportDetail,
     submitRemoteReport: submitRemoteReport,
     updateRemoteReportStatus: updateRemoteReportStatus,
+    initiateMpesaPayment: initiateMpesaPayment,
     updateRemoteReportPaymentMode: updateRemoteReportPaymentMode,
     updateRemoteUserRole: updateRemoteUserRole,
     updateRemotePaymentMode: updateRemotePaymentMode,
